@@ -118,12 +118,13 @@ export class Camera {
     return current + d / delta;
   }
 
-  renderScene(ctx: CanvasRenderingContext2D, callback: (ctx: CanvasRenderingContext2D) => void) {
+  /** size는 논리 픽셀 크기. 캔버스 실제 픽셀은 배율이 곱해져 있어 canvas.width를 쓰면 중심이 어긋난다 */
+  renderScene(ctx: CanvasRenderingContext2D, size: VectorLike, callback: (ctx: CanvasRenderingContext2D) => void) {
     const zoomFactor = initialZoom * 2 * this._zoom;
     ctx.save();
     ctx.translate(-this.x * this._zoom, -this.y * this._zoom);
     ctx.scale(this.zoom, this.zoom);
-    ctx.translate(ctx.canvas.width / zoomFactor, ctx.canvas.height / zoomFactor);
+    ctx.translate(size.x / zoomFactor, size.y / zoomFactor);
     callback(ctx);
     ctx.restore();
   }

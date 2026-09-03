@@ -27,7 +27,10 @@ export type RenderParameters = {
   theme: ColorTheme;
 };
 
-const MAX_DISPLAY_WIDTH = 1920;
+/** 화면 배율(devicePixelRatio)은 이 값까지만 반영한다. 그 이상은 비용 대비 차이가 없다 */
+const MAX_PIXEL_RATIO = 2;
+/** 실제 캔버스 픽셀 폭 상한. 4K에서도 그림자(bloom) 비용이 감당되는 선 */
+const MAX_PHYSICAL_WIDTH = 2560;
 const WINNER_TEXT_OFFSET = 30;
 const RESULT_PANEL_MAX_WIDTH_RATIO = 0.9;
 const RESULT_PANEL_MAX_HEIGHT_RATIO = 0.8;
@@ -41,10 +44,17 @@ function inRect(rect: Rect | undefined, x: number, y: number): boolean {
 
 export class RouletteRenderer {
   protected _canvas!: HTMLCanvasElement;
-  protected _sceneCanvas!: HTMLCanvasElement;
   protected ctx!: CanvasRenderingContext2D;
-  private _displayCtx!: CanvasRenderingContext2D;
+  /** 마우스 좌표(CSS px) → 논리 좌표 변환 계수 */
   public sizeFactor = 1;
+  /**
+   * 그리기 코드는 전부 "논리 픽셀"(CSS 폭의 절반) 기준이다. 시야와 HUD 비율을 원본과 같게
+   * 유지하면서, 실제 캔버스는 디스플레이 배율만큼 크게 잡고 변환으로 확대해 선명하게 그린다
+   */
+  private _logicalWidth = canvasWidth;
+  private _logicalHeight = canvasHeight;
+  /** 논리 픽셀 1개당 실제 캔버스 픽셀 수 */
+  private _pixelRatio = 1;
 
   protected _images: { [key: string]: HTMLImageElement } = {};
   protected _theme: ColorTheme = Themes.dark;
@@ -53,11 +63,15 @@ export class RouletteRenderer {
   private _lastResult: Marble[] | null = null;
 
   get width() {
-    return this._sceneCanvas.width;
+    return this._logicalWidth;
   }
 
   get height() {
-    return this._sceneCanvas.height;
+    return this._logicalHeight;
+  }
+
+  get pixelRatio() {
+    return this._pixelRatio;
   }
 
   get canvas() {
@@ -74,14 +88,7 @@ export class RouletteRenderer {
     this._canvas = document.createElement('canvas');
     this._canvas.width = canvasWidth;
     this._canvas.height = canvasHeight;
-    this._displayCtx = this._canvas.getContext('2d', {
-      alpha: false,
-    }) as CanvasRenderingContext2D;
-
-    this._sceneCanvas = document.createElement('canvas');
-    this._sceneCanvas.width = canvasWidth;
-    this._sceneCanvas.height = canvasHeight;
-    this.ctx = this._sceneCanvas.getContext('2d', {
+    this.ctx = this._canvas.getContext('2d', {
       alpha: false,
     }) as CanvasRenderingContext2D;
 
@@ -91,15 +98,22 @@ export class RouletteRenderer {
       const realSize = entries ? entries[0].contentRect : this._canvas.getBoundingClientRect();
       if (realSize.width <= 0 || realSize.height <= 0) return;
 
+      // 논리 크기는 원본 규칙 그대로(CSS 폭의 절반, 최소 640). 카메라 시야가 여기에 묶여 있다
       const width = Math.max(realSize.width / 2, 640);
       const height = (width / realSize.width) * realSize.height;
-      this._sceneCanvas.width = width;
-      this._sceneCanvas.height = height;
+      this._logicalWidth = width;
+      this._logicalHeight = height;
       this.sizeFactor = width / realSize.width;
 
-      const displayWidth = Math.min(realSize.width, MAX_DISPLAY_WIDTH);
-      this._canvas.width = displayWidth;
-      this._canvas.height = (displayWidth / realSize.width) * realSize.height;
+      // 실제 픽셀은 CSS 크기 × 디스플레이 배율. 예전엔 논리 크기로 그린 뒤 확대해서 흐렸다
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      const physicalWidth = Math.min(Math.round(realSize.width * dpr), MAX_PHYSICAL_WIDTH);
+      this._pixelRatio = physicalWidth / width;
+      this._canvas.width = physicalWidth;
+      this._canvas.height = Math.round(height * this._pixelRatio);
+      // 크기를 바꾸면 컨텍스트 상태가 초기화되므로 여기서 다시 잡는다
+      this.ctx.imageSmoothingEnabled = true;
+      this.ctx.imageSmoothingQuality = 'high';
     };
 
     const resizeObserver = new ResizeObserver(resizing);
@@ -151,8 +165,10 @@ export class RouletteRenderer {
 
   render(renderParameters: RenderParameters, uiObjects: UIObject[]) {
     this._theme = renderParameters.theme;
+    // 이 아래는 전부 논리 픽셀 좌표. 실제 픽셀로의 확대는 이 변환 하나가 담당한다
+    this.ctx.setTransform(this._pixelRatio, 0, 0, this._pixelRatio, 0, 0);
     this.ctx.fillStyle = this._theme.background;
-    this.ctx.fillRect(0, 0, this._sceneCanvas.width, this._sceneCanvas.height);
+    this.ctx.fillRect(0, 0, this.width, this.height);
 
     this.ctx.save();
     this.ctx.scale(initialZoom, initialZoom);
@@ -160,7 +176,7 @@ export class RouletteRenderer {
     this.ctx.textBaseline = 'top';
     this.ctx.font = '0.4pt sans-serif';
     this.ctx.lineWidth = 3 / (renderParameters.camera.zoom + initialZoom);
-    renderParameters.camera.renderScene(this.ctx, () => {
+    renderParameters.camera.renderScene(this.ctx, { x: this.width, y: this.height }, () => {
       this.onBeforeEntities();
       this.renderEntities(renderParameters.entities);
       this.renderEffects(renderParameters);
@@ -169,14 +185,10 @@ export class RouletteRenderer {
     this.ctx.restore();
     this.onAfterScene();
 
-    uiObjects.forEach((obj) =>
-      obj.render(this.ctx, renderParameters, this._sceneCanvas.width, this._sceneCanvas.height)
-    );
+    uiObjects.forEach((obj) => obj.render(this.ctx, renderParameters, this.width, this.height));
     renderParameters.particleManager.render(this.ctx);
     this.renderWinnerProgress(renderParameters);
     this.renderResult(renderParameters);
-
-    this._displayCtx.drawImage(this._sceneCanvas, 0, 0, this._canvas.width, this._canvas.height);
   }
 
   private renderEntities(entities: MapEntityState[]) {
@@ -187,7 +199,7 @@ export class RouletteRenderer {
       this.ctx.rotate(entity.angle);
       this.ctx.fillStyle = entity.shape.color ?? this._theme.entity[entity.shape.type].fill;
       this.ctx.strokeStyle = entity.shape.color ?? this._theme.entity[entity.shape.type].outline;
-      this.ctx.shadowBlur = this._theme.entity[entity.shape.type].bloomRadius;
+      this.ctx.shadowBlur = this._theme.entity[entity.shape.type].bloomRadius * this._pixelRatio;
       this.ctx.shadowColor =
         entity.shape.bloomColor ?? entity.shape.color ?? this._theme.entity[entity.shape.type].bloom;
       const shape = entity.shape;
@@ -280,8 +292,8 @@ export class RouletteRenderer {
     if (end <= start) return; // 1명 추첨은 기존 하단 Winner 표시를 쓴다
 
     const ctx = this.ctx;
-    const w = this._sceneCanvas.width;
-    const h = this._sceneCanvas.height;
+    const w = this.width;
+    const h = this.height;
 
     const lineHeight = Math.min(24, Math.max(14, h * 0.042));
     const pad = lineHeight * 0.6;
@@ -365,8 +377,8 @@ export class RouletteRenderer {
   /** 당첨자가 여러명일 때 화면 중앙에 목록 팝업을 그린다 */
   private renderWinnerList(winners: Marble[], { theme, winnerRange }: RenderParameters) {
     const ctx = this.ctx;
-    const w = this._sceneCanvas.width;
-    const h = this._sceneCanvas.height;
+    const w = this.width;
+    const h = this.height;
 
     const lineHeight = Math.min(32, Math.max(16, h * 0.05));
     const padding = lineHeight;
@@ -437,17 +449,12 @@ export class RouletteRenderer {
   private renderWinner(winner: Marble, theme: ColorTheme) {
     this.ctx.save();
     this.ctx.fillStyle = theme.winnerBackground;
-    this.ctx.fillRect(
-      this._sceneCanvas.width / 2,
-      this._sceneCanvas.height - winnerAreaHeight,
-      this._sceneCanvas.width / 2,
-      winnerAreaHeight
-    );
+    this.ctx.fillRect(this.width / 2, this.height - winnerAreaHeight, this.width / 2, winnerAreaHeight);
 
     // Draw marble image or colored circle
     const marbleSize = 100;
-    const marbleCenterX = this._sceneCanvas.width - marbleSize / 2 - 20;
-    const marbleCenterY = this._sceneCanvas.height - winnerAreaHeight / 2;
+    const marbleCenterX = this.width - marbleSize / 2 - 20;
+    const marbleCenterY = this.height - winnerAreaHeight / 2;
     const marbleImage = this.getMarbleImage(winner.name);
 
     if (marbleImage) {
@@ -473,16 +480,16 @@ export class RouletteRenderer {
     this.ctx.lineWidth = 4;
     const textRightX = marbleCenterX - marbleSize / 2 - 20;
     if (theme.winnerOutline) {
-      this.ctx.strokeText('Winner', textRightX, this._sceneCanvas.height - 120 + WINNER_TEXT_OFFSET);
+      this.ctx.strokeText('Winner', textRightX, this.height - 120 + WINNER_TEXT_OFFSET);
     }
 
-    this.ctx.fillText('Winner', textRightX, this._sceneCanvas.height - 120 + WINNER_TEXT_OFFSET);
+    this.ctx.fillText('Winner', textRightX, this.height - 120 + WINNER_TEXT_OFFSET);
     this.ctx.font = 'bold 72px sans-serif';
     this.ctx.fillStyle = `hsl(${winner.hue} 100% ${theme.marbleLightness})`;
     if (theme.winnerOutline) {
-      this.ctx.strokeText(winner.name, textRightX, this._sceneCanvas.height - 55 + WINNER_TEXT_OFFSET);
+      this.ctx.strokeText(winner.name, textRightX, this.height - 55 + WINNER_TEXT_OFFSET);
     }
-    this.ctx.fillText(winner.name, textRightX, this._sceneCanvas.height - 55 + WINNER_TEXT_OFFSET);
+    this.ctx.fillText(winner.name, textRightX, this.height - 55 + WINNER_TEXT_OFFSET);
     this.ctx.restore();
   }
 }

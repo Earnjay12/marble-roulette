@@ -1,4 +1,5 @@
 import type { MapEntity } from '../types/MapEntity.type';
+import { customStages } from './customMaps';
 
 export type StageDef = {
   title: string;
@@ -7,7 +8,7 @@ export type StageDef = {
   zoomY: number;
 };
 
-export const stages: StageDef[] = [
+const baseStages: StageDef[] = [
   {
     title: 'Wheel of fortune',
     goalY: 111,
@@ -2980,3 +2981,5 @@ export const stages: StageDef[] = [
     ],
   },
 ];
+
+export const stages: StageDef[] = [...baseStages, ...customStages];
