@@ -118,6 +118,10 @@
     applyWinnerSetting(edited);
   }
 
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+
 
   let ready = false;
   let winnerType = 'first';
@@ -195,15 +199,56 @@
       window.roulette.setAutoRecording(window.options.autoRecording);
     });
 
-    document.querySelector('#chkSkill').addEventListener('change', (e) => {
-      window.options.useSkills = e.target.matches(':checked');
+    // 스킬 모드: 없음 / 기본(폭발만) / 능력(구슬마다 고유 스킬)
+    const applySkillMode = (mode) => {
+      window.options.skillMode = mode;
+      localStorage.setItem('mbr_skill', mode);
+      document.querySelectorAll('.btn-skill').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.skill === mode);
+      });
+      document.querySelector('#btnAbilities').classList.toggle('visible', mode === 'rpg');
+    };
+    document.querySelectorAll('.btn-skill').forEach((btn) => {
+      btn.addEventListener('click', () => applySkillMode(btn.dataset.skill));
+    });
+    applySkillMode(localStorage.getItem('mbr_skill') || 'basic');
+
+    // 능력표 창: 스킬 설명과 구슬별 배정 결과
+    const renderAbilities = () => {
+      document.querySelector('#abilityLegend').innerHTML = window.roulette
+        .getSkillList()
+        .map((s) => `<li><span class="ic">${s.icon}</span><b>${s.name}</b><span class="desc">${s.description}</span></li>`)
+        .join('');
+      document.querySelector('#abilityList').innerHTML = window.roulette
+        .getMarbleAbilities()
+        .map(
+          (m) =>
+            `<li><span class="dot" style="background: hsl(${m.hue} 100% 60%)"></span>` +
+            `<span class="nm">${escapeHtml(m.name)}</span><span class="ic">${m.icon}</span><span class="sk">${m.skillName}</span></li>`
+        )
+        .join('');
+    };
+    const abilitiesModal = document.querySelector('#abilities');
+    document.querySelector('#btnAbilities').addEventListener('click', () => {
+      renderAbilities();
+      abilitiesModal.classList.add('open');
+    });
+    document.querySelector('#closeAbilities').addEventListener('click', () => abilitiesModal.classList.remove('open'));
+    abilitiesModal.addEventListener('click', (e) => {
+      if (e.target === abilitiesModal) abilitiesModal.classList.remove('open');
     });
 
-    document.querySelector('#chkDarkMode').addEventListener('change', (e) => {
-      window.options.darkMode = e.target.matches(':checked');
-      window.roulette.setTheme(window.options.darkMode ? 'dark' : 'light');
-      document.documentElement.classList.toggle('light', !window.options.darkMode);
-    });
+    // 테마
+    const applyTheme = (name) => {
+      window.roulette.setTheme(name);
+      document.documentElement.classList.toggle('light', name === 'doodle');
+      document.documentElement.dataset.theme = name;
+      localStorage.setItem('mbr_theme', name);
+    };
+    const themeSelect = document.querySelector('#sltTheme');
+    themeSelect.value = localStorage.getItem('mbr_theme') || 'dark';
+    applyTheme(themeSelect.value);
+    themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
 
     document.querySelector('#in_winningRank').addEventListener('change', () => selectWinnerType('custom'));
     document.querySelector('.btn-last-winner').addEventListener('click', () => selectWinnerType('last'));
@@ -291,12 +336,17 @@
           </label>
           <input type="checkbox" id="chkAutoRecording" />
         </div>
-        <div class='toggle-item'>
-          <label for='chkSkill'>
-            <i class="icon bomb"></i>
-            <span data-trans>Using skills</span>
-          </label>
-          <input type="checkbox" id="chkSkill" checked />
+      </div>
+      <div class="row row-skill">
+        <label>
+          <i class="icon bomb"></i>
+          <span data-trans>Skills</span>
+        </label>
+        <div class="btn-group">
+          <button class="btn-skill" data-skill="none" data-trans>None</button>
+          <button class="btn-skill active" data-skill="basic" data-trans>Basic</button>
+          <button class="btn-skill" data-skill="rpg" data-trans>Abilities</button>
+          <button id="btnAbilities" class="btn-abilities" data-trans>List</button>
         </div>
       </div>
       <div class="row">
@@ -320,11 +370,17 @@
         </div>
       </div>
       <div class="row row-theme">
-        <div class='theme'>
-          <i class='icon sun'></i>
-          <input type='checkbox' id='chkDarkMode' checked />
-          <i class='icon moon'></i>
-        </div>
+        <label for='sltTheme'>
+          <i class="icon sun"></i>
+          <span data-trans>Theme</span>
+        </label>
+        <select id="sltTheme">
+          <option value="dark" data-trans>Classic</option>
+          <option value="pinball" data-trans>Pinball</option>
+          <option value="fantasy" data-trans>Fantasy</option>
+          <option value="cyber" data-trans>Cyber City</option>
+          <option value="doodle" data-trans>Doodle</option>
+        </select>
       </div>
     </div>
   </div>
@@ -340,6 +396,18 @@
         <i class="icon play"></i>
         <span data-trans>Start</span>
       </button>
+    </div>
+  </div>
+</div>
+<div id="abilities" class="modal">
+  <div class="modal-panel">
+    <h2 data-trans>Marble abilities</h2>
+    <div class="modal-body">
+      <ul id="abilityLegend" class="legend"></ul>
+      <ul id="abilityList" class="marble-list"></ul>
+    </div>
+    <div class="modal-action">
+      <button id="closeAbilities" data-trans>Close</button>
     </div>
   </div>
 </div>

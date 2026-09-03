@@ -58,14 +58,22 @@ function spinner(x: number, y: number, halfLength: number, speed: number): MapEn
   };
 }
 
-/** 튕기는 범퍼. life를 주면 그 횟수만큼 맞고 사라지는 거품이 된다 */
-function bumper(x: number, y: number, radius: number, restitution = 1.2, life?: number): MapEntity {
+/**
+ * 노란 거품. 구슬이 닿으면 터져서 사라진다(life). 원본 버블팝과 같은 규칙이라
+ * "노란 원 = 터지는 것"으로 통일한다. 안 터지는 범퍼가 필요하면 diamond를 쓴다
+ */
+function bubble(x: number, y: number, radius: number, restitution = 1.4): MapEntity {
   return {
     type: 'static',
     position: { x, y },
-    props: { density: 1, angularVelocity: 0, restitution, ...(life ? { life } : {}) },
+    props: { density: 1, angularVelocity: 0, restitution, life: 1 },
     shape: { type: 'circle', radius },
   };
+}
+
+/** 터지지 않는 큰 마름모 범퍼. size는 절반 크기(대각선 반지름은 size×1.41) */
+function diamond(x: number, y: number, size: number, restitution = 1.3): MapEntity {
+  return peg(x, y, size, restitution);
 }
 
 /**
@@ -186,7 +194,7 @@ function zigzagFalls(): StageDef {
 
   // 경사면이 끝난 뒤 범퍼 삼각형과 톱니.
   // 톱니는 못·범퍼와 높이를 겹치면 안 된다. 톱니 윗면과 못 사이에 구슬이 끼어 멈춘 적이 있다
-  entities.push(bumper(10.5, 76, 0.8, 1.4), bumper(15.5, 76, 0.8, 1.4), bumper(13, 81, 0.9, 1.4));
+  entities.push(diamond(10.5, 76, 0.65), diamond(15.5, 76, 0.65), diamond(13, 81, 0.75));
   entities.push(...teeth(left, right, [70, 85]));
   entities.push(gateWheel(goalY, 1.3));
 
@@ -213,7 +221,7 @@ function pinballGarden(): StageDef {
   // 못 줄(2.2칸 간격) 사이 빈틈에 정확히 들어가는 높이. 못과 겹치면 또 홈이 된다
   entities.push(...teeth(left, right, [23.9, 32.7, 41.5]));
 
-  // 두 번 맞으면 터지는 거품. 앞선 구슬이 터뜨린 자리를 뒤 구슬은 그냥 지나가므로 라운드마다 다르다
+  // 터지는 거품. 앞선 구슬이 터뜨린 자리를 뒤 구슬은 그냥 지나가므로 라운드마다 다르다
   const bubbles: [number, number][] = [
     [9.5, 52],
     [12, 52],
@@ -223,11 +231,11 @@ function pinballGarden(): StageDef {
     [13.25, 56],
     [15.75, 56],
   ];
-  bubbles.forEach(([x, y]) => entities.push(bumper(x, y, 0.6, 1.4, 2)));
+  bubbles.forEach(([x, y]) => entities.push(bubble(x, y, 0.6)));
 
   entities.push(...teeth(left, right, [60, 72]));
   entities.push(spinner(10.5, 65, 1.4, 8), spinner(15.5, 65, 1.4, -8));
-  entities.push(bumper(13, 71, 0.9, 1.4), bumper(9.8, 77, 0.8, 1.4), bumper(16.2, 77, 0.8, 1.4));
+  entities.push(diamond(13, 71, 0.7), diamond(9.8, 77, 0.6), diamond(16.2, 77, 0.6));
   entities.push(...teeth(left, right, [82]));
   entities.push(gateWheel(goalY, 1.3));
 
@@ -261,7 +269,7 @@ function windmillVillage(): StageDef {
     }
   });
 
-  entities.push(bumper(11, 82, 0.8, 1.4), bumper(15, 82, 0.8, 1.4));
+  entities.push(diamond(11, 82, 0.65), diamond(15, 82, 0.65));
   entities.push(...teeth(left, right, [86]));
   entities.push(gateWheel(goalY, 1.3));
 
@@ -301,9 +309,9 @@ function hourglassStairs(): StageDef {
     // 목 바로 아래의 빠른 풍차. 틈보다 길어서 구슬을 막았다가 아무 방향으로나 던진다
     const center = (gapL + gapR) / 2;
     entities.push(spinner(center, bottom + 1.4, 1.4, i % 2 === 0 ? 9 : -9));
-    // 그 아래 범퍼 세 개가 구슬을 다시 폭 전체로 벌려 놓는다
-    const bx = [center - 4, center, center + 4].map((x) => Math.min(right - 1.5, Math.max(left + 1.5, x)));
-    bx.forEach((x, j) => entities.push(bumper(x, bottom + 5.5 + (j === 1 ? 1.5 : 0), 0.7, 1.4)));
+    // 그 아래 마름모 범퍼 세 개가 구슬을 다시 폭 전체로 벌려 놓는다. 벽에서 2칸은 띄운다(끼임 방지)
+    const bx = [center - 4, center, center + 4].map((x) => Math.min(right - 2, Math.max(left + 2, x)));
+    bx.forEach((x, j) => entities.push(diamond(x, bottom + 5.5 + (j === 1 ? 1.5 : 0), 0.6)));
   });
 
   // 한 번 맞으면 터지는 거품 밭
@@ -320,7 +328,7 @@ function hourglassStairs(): StageDef {
     [16.5, 82.5],
     [19.5, 82.5],
   ];
-  bubbles.forEach(([x, y]) => entities.push(bumper(x, y, 0.7, 1.5, 1)));
+  bubbles.forEach(([x, y]) => entities.push(bubble(x, y, 0.7, 1.5)));
 
   entities.push(...teeth(left, right, [87]));
   entities.push(gateWheel(goalY, 1.3));

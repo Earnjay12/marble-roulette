@@ -1,4 +1,4 @@
-import { Skills, STUCK_DELAY, Themes } from './data/constants';
+import { RPG_TRIGGER_RATE, SkillInfos, Skills, STUCK_DELAY, Themes } from './data/constants';
 import type { IPhysics } from './IPhysics';
 import options from './options';
 import type { ColorTheme } from './types/ColorTheme';
@@ -15,8 +15,15 @@ export class Marble {
   hue: number = 0;
   impact: number = 0;
   weight: number = 1;
+  /** 이번 프레임에 발동한 스킬. 매 프레임 None으로 되돌아간다 */
   skill: Skills = Skills.None;
+  /** 능력 모드에서 이 구슬이 가진 고유 스킬 */
+  ability: Skills = Skills.None;
   isActive: boolean = false;
+
+  /** 지속 효과(깃털·무게추·유령)가 켜져 있으면 그 스킬, 남은 시간 */
+  private _effectSkill: Skills = Skills.None;
+  private _effectRemaining = 0;
 
   private _skillRate = 0.0005;
   private _coolTime = 5000;
@@ -89,10 +96,38 @@ export class Marble {
     if (this.impact) {
       this.impact = Math.max(0, this.impact - deltaTime);
     }
+    this._updateEffect(deltaTime);
     if (!this.isActive) return;
     if (options.useSkills) {
       this._updateSkillInformation(deltaTime);
     }
+  }
+
+  get activeEffect(): Skills {
+    return this._effectSkill;
+  }
+
+  /** 지속 효과를 시작한다. 실제 물리 변경은 roulette이 하고, 여기서는 만료만 관리한다 */
+  startEffect(skill: Skills) {
+    this._effectSkill = skill;
+    this._effectRemaining = SkillInfos[skill].duration ?? 0;
+  }
+
+  private _updateEffect(deltaTime: number) {
+    if (this._effectSkill === Skills.None) return;
+    this._effectRemaining -= deltaTime;
+    if (this._effectRemaining > 0) return;
+
+    switch (this._effectSkill) {
+      case Skills.Feather:
+      case Skills.Anchor:
+        this.physics.setGravityScale(this.id, 1);
+        break;
+      case Skills.Ghost:
+        this.physics.setGhost(this.id, false);
+        break;
+    }
+    this._effectSkill = Skills.None;
   }
 
   private _updateSkillInformation(deltaTime: number) {
@@ -101,7 +136,13 @@ export class Marble {
     }
 
     if (this._coolTime <= 0) {
-      this.skill = Math.random() < this._skillRate ? Skills.Impact : Skills.None;
+      if (options.skillMode === 'rpg') {
+        // 지속 효과가 도는 동안은 다시 걸지 않는다
+        const canFire = this.ability !== Skills.None && this._effectSkill === Skills.None;
+        this.skill = canFire && Math.random() < RPG_TRIGGER_RATE ? this.ability : Skills.None;
+      } else {
+        this.skill = Math.random() < this._skillRate ? Skills.Impact : Skills.None;
+      }
       this._coolTime = this._maxCoolTime;
     }
   }
@@ -153,8 +194,10 @@ export class Marble {
 
     ctx.fillStyle = `hsl(${this.hue} 100% ${this.theme.marbleLightness + 25 * Math.min(1, this.impact / 500)}%`;
 
-    // ctx.shadowColor = this.color;
-    // ctx.shadowBlur = zoom / 2;
+    // 유령 상태는 반투명하게 그려서 통과 중임을 보여준다
+    if (this._effectSkill === Skills.Ghost) {
+      ctx.globalAlpha = 0.45;
+    }
     if (skin) {
       transformGuard(ctx, () => {
         ctx.translate(this.x, this.y);
@@ -165,6 +208,7 @@ export class Marble {
       this._drawMarbleBody(ctx, false);
     }
 
+    ctx.globalAlpha = 1;
     ctx.shadowColor = '';
     ctx.shadowBlur = 0;
     this._drawName(ctx, zoom);
@@ -176,6 +220,23 @@ export class Marble {
     if (options.useSkills) {
       this._renderCoolTime(ctx, zoom);
     }
+    if (options.skillMode === 'rpg') {
+      this._drawAbilityIcon(ctx, zoom);
+    }
+  }
+
+  /** 능력 모드에서 구슬 머리 위에 붙는 스킬 아이콘 */
+  private _drawAbilityIcon(ctx: CanvasRenderingContext2D, zoom: number) {
+    const icon = SkillInfos[this.ability].icon;
+    if (!icon) return;
+    transformGuard(ctx, () => {
+      ctx.translate(this.x, this.y - this.size / 2 - 0.12);
+      ctx.scale(1 / zoom, 1 / zoom);
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(icon, 0, 0);
+    });
   }
 
   private _drawName(ctx: CanvasRenderingContext2D, zoom: number) {

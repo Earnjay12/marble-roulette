@@ -419,10 +419,6 @@ div.copyright a {
         padding-left: 0;
       }
 
-      &.row-theme {
-        display: none;
-      }
-
       .icon {
         width: 15px;
         height: 15px;
@@ -505,4 +501,161 @@ div.toast {
   background-color: #0077ff;
   border: 2px solid black;
   border-radius: 10px;
+}
+
+// 스킬 모드 행의 능력표 버튼. 능력 모드일 때만 보인다
+#settings .btn-group .btn-abilities {
+  display: none;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #ffb300;
+  color: #222;
+  font-weight: bold;
+
+  &.visible {
+    display: flex;
+  }
+}
+
+// 구슬 능력표 창
+#abilities {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+
+  &.open {
+    display: flex;
+  }
+
+  .modal-panel {
+    background: #222;
+    color: #eee;
+    border-radius: 12px;
+    width: min(600px, 92vw);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  h2 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 14pt;
+    background: #333;
+  }
+
+  .modal-body {
+    overflow: auto;
+    padding: 12px 16px;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .legend li {
+    display: grid;
+    grid-template-columns: 28px 64px 1fr;
+    gap: 6px;
+    align-items: center;
+    padding: 3px 0;
+    font-size: 10pt;
+    color: #ccc;
+
+    b {
+      color: #fff;
+    }
+  }
+
+  .marble-list {
+    margin-top: 10px;
+    border-top: 1px solid #444;
+    padding-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 4px 12px;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11pt;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .nm {
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sk {
+      color: #aaa;
+      font-size: 9pt;
+    }
+  }
+
+  .modal-action {
+    padding: 10px 16px;
+    text-align: right;
+    background: #333;
+
+    button {
+      background: #555;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+    }
+  }
+}
+
+// 낙서 테마(밝은 배경)에서는 창도 종이색으로
+:root.light #abilities {
+  .modal-panel {
+    background: #fbf7ea;
+    color: #222;
+  }
+
+  h2,
+  .modal-action {
+    background: #efe8d2;
+  }
+
+  .legend li {
+    color: #444;
+
+    b {
+      color: #222;
+    }
+  }
+
+  .marble-list {
+    border-color: #ddd;
+
+    .sk {
+      color: #666;
+    }
+  }
+
+  .modal-action button {
+    background: #2d3436;
+  }
 }

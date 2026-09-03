@@ -1,5 +1,6 @@
+import { SkillInfos } from './data/constants';
 import type { Marble } from './marble';
-import type { WinnerRange } from './options';
+import options, { type WinnerRange } from './options';
 import type { RenderParameters } from './rouletteRenderer';
 import type { Rect } from './types/rect.type';
 import type { MouseEventArgs, UIObject } from './UIObject';
@@ -99,21 +100,28 @@ export class RankRenderer implements UIObject {
       ctx.lineWidth = 2;
       ctx.strokeStyle = theme.rankStroke;
     }
-    winners.forEach((marble: { hue: number; name: string }, rank: number) => {
+    // 능력 모드에서는 이름 앞에 능력 아이콘을 붙여 목록에서도 한눈에 보이게 한다
+    const label = (marble: Marble) =>
+      options.skillMode === 'rpg' && SkillInfos[marble.ability].icon
+        ? `${SkillInfos[marble.ability].icon} ${marble.name}`
+        : marble.name;
+    winners.forEach((marble, rank) => {
       const y = rank * this.fontHeight;
       if (y >= startY && y <= startY + ctx.canvas.height) {
         ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
-        ctx.strokeText(`${this.isWinningRank(rank) ? '☆' : '\u2714'} ${marble.name} #${rank + 1}`, startX, 20 + y);
-        ctx.fillText(`${this.isWinningRank(rank) ? '☆' : '\u2714'} ${marble.name} #${rank + 1}`, startX, 20 + y);
+        const text = `${this.isWinningRank(rank) ? '☆' : '✔'} ${label(marble)} #${rank + 1}`;
+        ctx.strokeText(text, startX, 20 + y);
+        ctx.fillText(text, startX, 20 + y);
       }
     });
     ctx.font = '10pt sans-serif';
-    marbles.forEach((marble: { hue: number; name: string }, rank: number) => {
+    marbles.forEach((marble, rank) => {
       const y = (rank + winners.length) * this.fontHeight;
       if (y >= startY && y <= startY + ctx.canvas.height) {
         ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
-        ctx.strokeText(`${marble.name} #${rank + 1 + winners.length}`, startX, 20 + y);
-        ctx.fillText(`${marble.name} #${rank + 1 + winners.length}`, startX, 20 + y);
+        const text = `${label(marble)} #${rank + 1 + winners.length}`;
+        ctx.strokeText(text, startX, 20 + y);
+        ctx.fillText(text, startX, 20 + y);
       }
     });
     ctx.restore();

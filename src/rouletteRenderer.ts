@@ -38,6 +38,16 @@ const RESULT_COLUMN_MAX_WIDTH = 280;
 const PROGRESS_MAX_WIDTH_RATIO = 0.3;
 const PROGRESS_ACCENT = 'rgba(255, 215, 0, 0.8)';
 
+/** 판타지 테마의 별. 매 프레임 같은 자리에 있어야 하므로 한 번만 뽑아 둔다 ([x비율, y비율, 크기 0~1]) */
+const STARS: [number, number, number][] = (() => {
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  return Array.from({ length: 140 }, () => [rand(), rand(), rand()]);
+})();
+
 function inRect(rect: Rect | undefined, x: number, y: number): boolean {
   return !!rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 }
@@ -169,6 +179,7 @@ export class RouletteRenderer {
     this.ctx.setTransform(this._pixelRatio, 0, 0, this._pixelRatio, 0, 0);
     this.ctx.fillStyle = this._theme.background;
     this.ctx.fillRect(0, 0, this.width, this.height);
+    this.renderPattern(this._theme);
 
     this.ctx.save();
     this.ctx.scale(initialZoom, initialZoom);
@@ -189,6 +200,65 @@ export class RouletteRenderer {
     renderParameters.particleManager.render(this.ctx);
     this.renderWinnerProgress(renderParameters);
     this.renderResult(renderParameters);
+  }
+
+  /** 테마 배경 무늬. 화면(논리 픽셀)에 고정되어 카메라를 따라 움직이지 않는다 */
+  private renderPattern(theme: ColorTheme) {
+    if (!theme.pattern || !theme.patternColor) return;
+    const ctx = this.ctx;
+    const w = this.width;
+    const h = this.height;
+    ctx.save();
+    ctx.fillStyle = theme.patternColor;
+    ctx.strokeStyle = theme.patternColor;
+    switch (theme.pattern) {
+      case 'dots':
+        for (let y = 20; y < h; y += 40) {
+          for (let x = 20; x < w; x += 40) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        break;
+      case 'stars':
+        for (const [sx, sy, size] of STARS) {
+          ctx.globalAlpha = 0.3 + size * 0.5;
+          ctx.beginPath();
+          ctx.arc(sx * w, sy * h, 0.6 + size * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'grid':
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = 0; x < w; x += 48) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+        }
+        for (let y = 0; y < h; y += 48) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+        break;
+      case 'paper':
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = 36; y < h; y += 32) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+        // 공책의 빨간 세로 여백선
+        ctx.strokeStyle = 'rgba(214, 48, 49, 0.35)';
+        ctx.beginPath();
+        ctx.moveTo(w * 0.12, 0);
+        ctx.lineTo(w * 0.12, h);
+        ctx.stroke();
+        break;
+    }
+    ctx.restore();
   }
 
   private renderEntities(entities: MapEntityState[]) {

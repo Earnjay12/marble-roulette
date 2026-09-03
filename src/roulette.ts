@@ -1,5 +1,14 @@
 import { Camera } from './camera';
-import { canvasHeight, canvasWidth, initialZoom, Skills, Themes, zoomThreshold } from './data/constants';
+import {
+  canvasHeight,
+  canvasWidth,
+  initialZoom,
+  RPG_SKILL_POOL,
+  SkillInfos,
+  Skills,
+  Themes,
+  zoomThreshold,
+} from './data/constants';
 import { type StageDef, stages } from './data/maps';
 import { FastForwader } from './fastForwader';
 import type { GameObject } from './gameObject';
@@ -151,9 +160,8 @@ export class Roulette extends EventTarget {
     for (let i = 0; i < this._marbles.length; i++) {
       const marble = this._marbles[i];
       marble.update(deltaTime);
-      if (marble.skill === Skills.Impact) {
-        this._effects.push(new SkillEffect(marble.x, marble.y));
-        this.physics.impact(marble.id);
+      if (marble.skill !== Skills.None) {
+        this._applySkill(marble);
       }
       if (marble.y > this._stage.goalY) {
         this._winners.push(marble);
@@ -176,6 +184,63 @@ export class Roulette extends EventTarget {
     this._marbles = this._marbles.filter((marble) => marble.y <= this._stage?.goalY);
 
     this._checkFinish();
+  }
+
+  /** 발동한 스킬을 물리에 적용하고 이펙트를 띄운다 */
+  private _applySkill(marble: Marble) {
+    const skill = marble.skill;
+    this._effects.push(new SkillEffect(marble.x, marble.y, skill));
+    switch (skill) {
+      case Skills.Impact:
+        this.physics.impact(marble.id);
+        break;
+      case Skills.Dash:
+        this.physics.applyImpulse(marble.id, 0, 9);
+        break;
+      case Skills.Jump:
+        this.physics.applyImpulse(marble.id, 0, -8);
+        break;
+      case Skills.Feather:
+        this.physics.setGravityScale(marble.id, 0.2);
+        marble.startEffect(skill);
+        break;
+      case Skills.Anchor:
+        this.physics.setGravityScale(marble.id, 3);
+        marble.startEffect(skill);
+        break;
+      case Skills.Magnet:
+        this.physics.attract(marble.id);
+        break;
+      case Skills.Freeze:
+        this.physics.freezeAround(marble.id, SkillInfos[Skills.Freeze].effectRadius);
+        break;
+      case Skills.Ghost:
+        this.physics.setGhost(marble.id, true);
+        marble.startEffect(skill);
+        break;
+    }
+  }
+
+  /** 능력 모드 목록 창에 보여줄 구슬별 능력. 생성 순서(id) 기준 */
+  public getMarbleAbilities() {
+    return [...this._marbles]
+      .sort((a, b) => a.id - b.id)
+      .map((marble) => {
+        const info = SkillInfos[marble.ability];
+        return {
+          name: marble.name,
+          hue: marble.hue,
+          ability: marble.ability,
+          skillName: info.name,
+          icon: info.icon,
+          description: info.description,
+        };
+      });
+  }
+
+  /** 능력 모드에서 쓰이는 스킬 설명 목록 */
+  public getSkillList() {
+    return RPG_SKILL_POOL.map((skill) => ({ skill, ...SkillInfos[skill] }));
   }
 
   /** 카메라와 슬로우모션이 주목할 구슬 = 당첨 커트라인에 걸쳐있는 구슬 */
@@ -453,6 +518,14 @@ export class Roulette extends EventTarget {
           this._marbles.push(new Marble(this.physics, order, totalCount, member.name, member.weight));
         }
       }
+    });
+
+    // 능력은 항상 나눠 둔다. 나중에 능력 모드로 바꿔도 바로 쓸 수 있고, 섞기를 누르면 새로 배정된다.
+    // 8종을 골고루 돌리되 순서는 매번 섞는다
+    let pool = shuffle(RPG_SKILL_POOL);
+    this._marbles.forEach((marble, i) => {
+      if (i % pool.length === 0 && i > 0) pool = shuffle(RPG_SKILL_POOL);
+      marble.ability = pool[i % pool.length];
     });
 
     // 카메라를 구슬 생성 위치 중앙으로 이동 + 줌인

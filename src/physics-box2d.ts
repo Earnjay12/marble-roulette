@@ -3,6 +3,10 @@ import type { StageDef } from './data/maps';
 import type { IPhysics } from './IPhysics';
 import type { MapEntity, MapEntityState } from './types/MapEntity.type';
 
+/** box2d 충돌 필터 비트. 벽·장애물은 기본값(0x0001), 구슬은 0x0002 */
+const MARBLE_CATEGORY = 0x0002;
+const COLLIDE_ALL = 0xffff;
+
 export class Box2dPhysics implements IPhysics {
   private Box2D!: typeof Box2D & EmscriptenModule;
   private gravity!: Box2D.b2Vec2;
@@ -109,10 +113,74 @@ export class Box2dPhysics implements IPhysics {
     bodyDef.set_position(new this.Box2D.b2Vec2(x, y));
 
     const body = this.world.CreateBody(bodyDef);
-    body.CreateFixture(circleShape, 1 + Math.random());
+    const fixtureDef = new this.Box2D.b2FixtureDef();
+    fixtureDef.set_shape(circleShape);
+    fixtureDef.set_density(1 + Math.random());
+    // 구슬끼리만 구분되는 카테고리를 준다. 유령 스킬이 다른 구슬과의 충돌만 끌 수 있게
+    fixtureDef.get_filter().set_categoryBits(MARBLE_CATEGORY);
+    fixtureDef.get_filter().set_maskBits(COLLIDE_ALL);
+    body.CreateFixture(fixtureDef);
     body.SetAwake(false);
     body.SetEnabled(false);
     this.marbleMap[id] = body;
+  }
+
+  attract(id: number): void {
+    const src = this.marbleMap[id];
+    if (!src) return;
+
+    Object.values(this.marbleMap).forEach((body) => {
+      if (body === src) return;
+      const toSrc = new this.Box2D.b2Vec2(src.GetPosition().x, src.GetPosition().y);
+      toSrc.op_sub(body.GetPosition());
+      const distSq = toSrc.LengthSquared();
+      if (distSq < 100 && distSq > 0.01) {
+        const power = 1 - Math.sqrt(distSq) / 10;
+        toSrc.Normalize();
+        toSrc.op_mul(power * 3);
+        body.ApplyLinearImpulseToCenter(toSrc, true);
+      }
+    });
+  }
+
+  freezeAround(id: number, radius: number): void {
+    const src = this.marbleMap[id];
+    if (!src) return;
+    const zero = new this.Box2D.b2Vec2(0, 0);
+
+    Object.values(this.marbleMap).forEach((body) => {
+      if (body === src) return;
+      const d = new this.Box2D.b2Vec2(body.GetPosition().x, body.GetPosition().y);
+      d.op_sub(src.GetPosition());
+      if (d.LengthSquared() < radius * radius) {
+        body.SetLinearVelocity(zero);
+        body.SetAngularVelocity(0);
+      }
+    });
+  }
+
+  applyImpulse(id: number, x: number, y: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    // 질량이 구슬마다 달라서(밀도 1~2) 질량에 비례시켜 체감 속도를 같게 한다
+    const mass = body.GetMass();
+    body.ApplyLinearImpulseToCenter(new this.Box2D.b2Vec2(x * mass, y * mass), true);
+  }
+
+  setGravityScale(id: number, scale: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    body.SetGravityScale(scale);
+    body.SetAwake(true);
+  }
+
+  setGhost(id: number, ghost: boolean): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    const fixture = body.GetFixtureList();
+    const filter = fixture.GetFilterData();
+    filter.set_maskBits(ghost ? COLLIDE_ALL & ~MARBLE_CATEGORY : COLLIDE_ALL);
+    fixture.SetFilterData(filter);
   }
 
   shakeMarble(id: number): void {

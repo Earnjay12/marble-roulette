@@ -5,6 +5,9 @@ interface ShapeColor {
   bloomRadius: number;
 }
 
+/** 배경 위에 깔리는 장식 무늬 */
+export type BackgroundPattern = 'dots' | 'stars' | 'grid' | 'paper';
+
 export interface ColorTheme {
   background: string;
   marbleLightness: number;
@@ -22,4 +25,6 @@ export interface ColorTheme {
   winnerText: string;
   winnerOutline: string;
   winnerBackground: string;
+  pattern?: BackgroundPattern;
+  patternColor?: string;
 }
