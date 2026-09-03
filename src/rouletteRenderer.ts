@@ -7,7 +7,7 @@ import type { Marble } from './marble';
 import { MINIMAP_INSET, MINIMAP_WIDTH } from './minimap';
 import type { WinnerRange } from './options';
 import type { ParticleManager } from './particleManager';
-import type { ColorTheme } from './types/ColorTheme';
+import type { ColorTheme, EntityStyle } from './types/ColorTheme';
 import type { MapEntityState } from './types/MapEntity.type';
 import type { VectorLike } from './types/VectorLike';
 import type { UIObject } from './UIObject';
@@ -261,47 +261,233 @@ export class RouletteRenderer {
     ctx.restore();
   }
 
+  /** 장애물. 테마의 entityStyle에 따라 크롬 레일·보석 범퍼·네온관·연필 낙서로 다르게 꾸민다 */
   private renderEntities(entities: MapEntityState[]) {
-    this.ctx.save();
+    const ctx = this.ctx;
+    const style = this._theme.entityStyle;
+    ctx.save();
     entities.forEach((entity) => {
-      const transform = this.ctx.getTransform();
-      this.ctx.translate(entity.x, entity.y);
-      this.ctx.rotate(entity.angle);
-      this.ctx.fillStyle = entity.shape.color ?? this._theme.entity[entity.shape.type].fill;
-      this.ctx.strokeStyle = entity.shape.color ?? this._theme.entity[entity.shape.type].outline;
-      this.ctx.shadowBlur = this._theme.entity[entity.shape.type].bloomRadius * this._pixelRatio;
-      this.ctx.shadowColor =
-        entity.shape.bloomColor ?? entity.shape.color ?? this._theme.entity[entity.shape.type].bloom;
+      const transform = ctx.getTransform();
+      ctx.translate(entity.x, entity.y);
+      ctx.rotate(entity.angle);
+      const colors = this._theme.entity[entity.shape.type];
+      const fill = entity.shape.color ?? colors.fill;
+      const outline = entity.shape.color ?? colors.outline;
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = outline;
+      ctx.shadowBlur = colors.bloomRadius * this._pixelRatio;
+      ctx.shadowColor = entity.shape.bloomColor ?? entity.shape.color ?? colors.bloom;
       const shape = entity.shape;
+      const lw = ctx.lineWidth;
       switch (shape.type) {
         case 'polyline':
-          if (shape.points.length > 0) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(shape.points[0][0], shape.points[0][1]);
-            for (let i = 1; i < shape.points.length; i++) {
-              this.ctx.lineTo(shape.points[i][0], shape.points[i][1]);
-            }
-            this.ctx.stroke();
-          }
+          this.drawPolyline(shape.points, style, lw, outline);
           break;
-        case 'box': {
-          const w = shape.width * 2;
-          const h = shape.height * 2;
-          this.ctx.rotate(shape.rotation);
-          this.ctx.fillRect(-w / 2, -h / 2, w, h);
-          this.ctx.strokeRect(-w / 2, -h / 2, w, h);
+        case 'box':
+          ctx.rotate(shape.rotation);
+          this.drawBox(shape.width * 2, shape.height * 2, style, lw, fill);
           break;
-        }
         case 'circle':
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, shape.radius, 0, Math.PI * 2, false);
-          this.ctx.stroke();
+          this.drawCircle(shape.radius, style, lw, fill);
           break;
       }
-
-      this.ctx.setTransform(transform);
+      ctx.lineWidth = lw;
+      ctx.setTransform(transform);
     });
-    this.ctx.restore();
+    ctx.restore();
+  }
+
+  private tracePolyline(points: [number, number][]) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i][0], points[i][1]);
+    }
+  }
+
+  private drawPolyline(points: [number, number][], style: EntityStyle, lw: number, outline: string) {
+    if (points.length === 0) return;
+    const ctx = this.ctx;
+    switch (style) {
+      case 'pinball':
+        // 크롬 레일: 굵고 어두운 바탕선 위에 밝은 선
+        this.tracePolyline(points);
+        ctx.lineWidth = lw * 3;
+        ctx.strokeStyle = 'rgba(30, 30, 30, 0.9)';
+        ctx.stroke();
+        this.tracePolyline(points);
+        ctx.lineWidth = lw * 1.3;
+        ctx.strokeStyle = outline;
+        ctx.stroke();
+        break;
+      case 'fantasy':
+        // 덩굴처럼 감긴 빛
+        this.tracePolyline(points);
+        ctx.lineWidth = lw * 1.5;
+        ctx.stroke();
+        ctx.save();
+        ctx.setLineDash([0.35, 0.55]);
+        ctx.lineWidth = lw * 3.5;
+        ctx.globalAlpha *= 0.35;
+        this.tracePolyline(points);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      case 'cyber':
+        // 네온관: 넓고 흐린 빛 위에 가늘고 흰 심지
+        ctx.save();
+        ctx.globalAlpha *= 0.4;
+        ctx.lineWidth = lw * 4;
+        this.tracePolyline(points);
+        ctx.stroke();
+        ctx.restore();
+        this.tracePolyline(points);
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+        break;
+      case 'sketch':
+        // 연필로 두 번 그은 선
+        ctx.save();
+        ctx.lineWidth = lw * 1.4;
+        ctx.globalAlpha *= 0.85;
+        this.tracePolyline(points);
+        ctx.stroke();
+        ctx.translate(0.06, 0.05);
+        ctx.globalAlpha *= 0.5;
+        this.tracePolyline(points);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      default:
+        this.tracePolyline(points);
+        ctx.stroke();
+    }
+  }
+
+  private drawBox(w: number, h: number, style: EntityStyle, lw: number, fill: string) {
+    const ctx = this.ctx;
+    const rect = () => ctx.fillRect(-w / 2, -h / 2, w, h);
+    const frame = () => ctx.strokeRect(-w / 2, -h / 2, w, h);
+    switch (style) {
+      case 'pinball':
+        rect();
+        frame();
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = lw * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(-w / 2 + lw, -h / 2 + lw);
+        ctx.lineTo(w / 2 - lw, -h / 2 + lw);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      case 'fantasy': {
+        const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+        g.addColorStop(0, '#fff6c8');
+        g.addColorStop(0.5, fill);
+        g.addColorStop(1, '#8a5a12');
+        ctx.fillStyle = g;
+        rect();
+        frame();
+        break;
+      }
+      case 'cyber':
+        ctx.save();
+        ctx.globalAlpha *= 0.35;
+        rect();
+        ctx.restore();
+        ctx.lineWidth = lw * 1.6;
+        frame();
+        break;
+      case 'sketch':
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha *= 0.25;
+        rect();
+        ctx.globalAlpha /= 0.25;
+        ctx.globalAlpha *= 0.9;
+        ctx.lineWidth = lw * 1.4;
+        frame();
+        ctx.translate(0.05, 0.04);
+        ctx.globalAlpha *= 0.45;
+        frame();
+        ctx.restore();
+        break;
+      default:
+        rect();
+        frame();
+    }
+  }
+
+  private drawCircle(r: number, style: EntityStyle, lw: number, fill: string) {
+    const ctx = this.ctx;
+    const circle = (rr: number) => {
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, 0, Math.PI * 2, false);
+    };
+    switch (style) {
+      case 'pinball':
+        // 핀볼 범퍼: 반투명 채움, 굵은 테, 흰 안쪽 링과 중심 점
+        circle(r);
+        ctx.save();
+        ctx.globalAlpha *= 0.35;
+        ctx.fill();
+        ctx.restore();
+        circle(r);
+        ctx.lineWidth = lw * 2;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = lw;
+        circle(r * 0.55);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        circle(r * 0.18);
+        ctx.fill();
+        break;
+      case 'fantasy': {
+        // 마법 구슬: 밝은 심에서 색으로 번지는 구면
+        const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r);
+        g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        g.addColorStop(0.6, fill);
+        g.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
+        circle(r);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.lineWidth = lw;
+        ctx.stroke();
+        break;
+      }
+      case 'cyber':
+        circle(r);
+        ctx.lineWidth = lw * 2;
+        ctx.stroke();
+        ctx.save();
+        ctx.setLineDash([r * 0.35, r * 0.25]);
+        ctx.lineWidth = lw;
+        circle(r * 0.65);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      case 'sketch':
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = lw * 1.5;
+        ctx.globalAlpha *= 0.9;
+        circle(r);
+        ctx.stroke();
+        ctx.translate(0.05, 0.04);
+        ctx.globalAlpha *= 0.45;
+        circle(r * 0.96);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      default:
+        circle(r);
+        ctx.stroke();
+    }
   }
 
   private renderEffects({ effects, camera }: RenderParameters) {

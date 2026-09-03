@@ -1,4 +1,5 @@
 import Box2DFactory from 'box2d-wasm';
+import { MARBLE_RADIUS } from './data/constants';
 import type { StageDef } from './data/maps';
 import type { IPhysics } from './IPhysics';
 import type { MapEntity, MapEntityState } from './types/MapEntity.type';
@@ -13,6 +14,8 @@ export class Box2dPhysics implements IPhysics {
   private world!: Box2D.b2World;
 
   private marbleMap: { [id: number]: Box2D.b2Body } = {};
+  /** 구슬마다 밀도가 달라서(1~2) 거인 스킬이 끝나면 원래 값으로 돌려놓아야 한다 */
+  private baseDensity: { [id: number]: number } = {};
   private entities: ({ body: Box2D.b2Body } & MapEntityState)[] = [];
 
   private deleteCandidates: Box2D.b2Body[] = [];
@@ -33,6 +36,7 @@ export class Box2dPhysics implements IPhysics {
       this.world.DestroyBody(body);
     });
     this.marbleMap = {};
+    this.baseDensity = {};
   }
 
   createStage(stage: StageDef): void {
@@ -105,82 +109,30 @@ export class Box2dPhysics implements IPhysics {
   }
 
   createMarble(id: number, x: number, y: number): void {
-    const circleShape = new this.Box2D.b2CircleShape();
-    circleShape.set_m_radius(0.25);
-
     const bodyDef = new this.Box2D.b2BodyDef();
     bodyDef.set_type(this.Box2D.b2_dynamicBody);
     bodyDef.set_position(new this.Box2D.b2Vec2(x, y));
 
     const body = this.world.CreateBody(bodyDef);
-    const fixtureDef = new this.Box2D.b2FixtureDef();
-    fixtureDef.set_shape(circleShape);
-    fixtureDef.set_density(1 + Math.random());
-    // 구슬끼리만 구분되는 카테고리를 준다. 유령 스킬이 다른 구슬과의 충돌만 끌 수 있게
-    fixtureDef.get_filter().set_categoryBits(MARBLE_CATEGORY);
-    fixtureDef.get_filter().set_maskBits(COLLIDE_ALL);
-    body.CreateFixture(fixtureDef);
+    this.baseDensity[id] = 1 + Math.random();
+    this.attachMarbleFixture(body, MARBLE_RADIUS, this.baseDensity[id], 0, COLLIDE_ALL);
     body.SetAwake(false);
     body.SetEnabled(false);
     this.marbleMap[id] = body;
   }
 
-  attract(id: number): void {
-    const src = this.marbleMap[id];
-    if (!src) return;
-
-    Object.values(this.marbleMap).forEach((body) => {
-      if (body === src) return;
-      const toSrc = new this.Box2D.b2Vec2(src.GetPosition().x, src.GetPosition().y);
-      toSrc.op_sub(body.GetPosition());
-      const distSq = toSrc.LengthSquared();
-      if (distSq < 100 && distSq > 0.01) {
-        const power = 1 - Math.sqrt(distSq) / 10;
-        toSrc.Normalize();
-        toSrc.op_mul(power * 3);
-        body.ApplyLinearImpulseToCenter(toSrc, true);
-      }
-    });
-  }
-
-  freezeAround(id: number, radius: number): void {
-    const src = this.marbleMap[id];
-    if (!src) return;
-    const zero = new this.Box2D.b2Vec2(0, 0);
-
-    Object.values(this.marbleMap).forEach((body) => {
-      if (body === src) return;
-      const d = new this.Box2D.b2Vec2(body.GetPosition().x, body.GetPosition().y);
-      d.op_sub(src.GetPosition());
-      if (d.LengthSquared() < radius * radius) {
-        body.SetLinearVelocity(zero);
-        body.SetAngularVelocity(0);
-      }
-    });
-  }
-
-  applyImpulse(id: number, x: number, y: number): void {
-    const body = this.marbleMap[id];
-    if (!body) return;
-    // 질량이 구슬마다 달라서(밀도 1~2) 질량에 비례시켜 체감 속도를 같게 한다
-    const mass = body.GetMass();
-    body.ApplyLinearImpulseToCenter(new this.Box2D.b2Vec2(x * mass, y * mass), true);
-  }
-
-  setGravityScale(id: number, scale: number): void {
-    const body = this.marbleMap[id];
-    if (!body) return;
-    body.SetGravityScale(scale);
-    body.SetAwake(true);
-  }
-
-  setGhost(id: number, ghost: boolean): void {
-    const body = this.marbleMap[id];
-    if (!body) return;
-    const fixture = body.GetFixtureList();
-    const filter = fixture.GetFilterData();
-    filter.set_maskBits(ghost ? COLLIDE_ALL & ~MARBLE_CATEGORY : COLLIDE_ALL);
-    fixture.SetFilterData(filter);
+  /** 구슬 픽스처를 만든다. 반지름·탄성이 바뀔 때 기존 것을 떼고 다시 붙이는 데도 쓴다 */
+  private attachMarbleFixture(body: Box2D.b2Body, radius: number, density: number, restitution: number, mask: number) {
+    const circleShape = new this.Box2D.b2CircleShape();
+    circleShape.set_m_radius(radius);
+    const fixtureDef = new this.Box2D.b2FixtureDef();
+    fixtureDef.set_shape(circleShape);
+    fixtureDef.set_density(density);
+    fixtureDef.set_restitution(restitution);
+    // 구슬끼리만 구분되는 카테고리를 준다. 유령 스킬이 다른 구슬과의 충돌만 끌 수 있게
+    fixtureDef.get_filter().set_categoryBits(MARBLE_CATEGORY);
+    fixtureDef.get_filter().set_maskBits(mask);
+    body.CreateFixture(fixtureDef);
   }
 
   shakeMarble(id: number): void {
@@ -195,6 +147,7 @@ export class Box2dPhysics implements IPhysics {
     if (marble) {
       this.world.DestroyBody(marble);
       delete this.marbleMap[id];
+      delete this.baseDensity[id];
     }
   }
 
@@ -235,6 +188,159 @@ export class Box2dPhysics implements IPhysics {
         body.ApplyLinearImpulseToCenter(distVector, true);
       }
     });
+  }
+
+  attract(id: number): void {
+    const src = this.marbleMap[id];
+    if (!src) return;
+
+    Object.values(this.marbleMap).forEach((body) => {
+      if (body === src) return;
+      const toSrc = new this.Box2D.b2Vec2(src.GetPosition().x, src.GetPosition().y);
+      toSrc.op_sub(body.GetPosition());
+      const distSq = toSrc.LengthSquared();
+      if (distSq < 100 && distSq > 0.01) {
+        const power = 1 - Math.sqrt(distSq) / 10;
+        toSrc.Normalize();
+        toSrc.op_mul(power * 3);
+        body.ApplyLinearImpulseToCenter(toSrc, true);
+      }
+    });
+  }
+
+  freezeAround(id: number, radius: number): void {
+    this.forEachAround(id, radius, (body) => {
+      body.SetLinearVelocity(new this.Box2D.b2Vec2(0, 0));
+      body.SetAngularVelocity(0);
+    });
+  }
+
+  slowAround(id: number, radius: number, factor: number): void {
+    this.forEachAround(id, radius, (body) => {
+      const v = body.GetLinearVelocity();
+      body.SetLinearVelocity(new this.Box2D.b2Vec2(v.x * factor, v.y * factor));
+    });
+  }
+
+  private forEachAround(id: number, radius: number, fn: (body: Box2D.b2Body) => void) {
+    const src = this.marbleMap[id];
+    if (!src) return;
+    Object.values(this.marbleMap).forEach((body) => {
+      if (body === src) return;
+      const d = new this.Box2D.b2Vec2(body.GetPosition().x, body.GetPosition().y);
+      d.op_sub(src.GetPosition());
+      if (d.LengthSquared() < radius * radius) fn(body);
+    });
+  }
+
+  freezeMarble(id: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    body.SetLinearVelocity(new this.Box2D.b2Vec2(0, 0));
+    body.SetAngularVelocity(0);
+  }
+
+  applyImpulse(id: number, x: number, y: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    const mass = body.GetMass();
+    body.ApplyLinearImpulseToCenter(new this.Box2D.b2Vec2(x * mass, y * mass), true);
+  }
+
+  scaleVelocity(id: number, factor: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    const v = body.GetLinearVelocity();
+    body.SetLinearVelocity(new this.Box2D.b2Vec2(v.x * factor, v.y * factor));
+    body.SetAwake(true);
+  }
+
+  setGravityScale(id: number, scale: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    body.SetGravityScale(scale);
+    body.SetAwake(true);
+  }
+
+  setGhost(id: number, ghost: boolean): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    const fixture = body.GetFixtureList();
+    const filter = fixture.GetFilterData();
+    filter.set_maskBits(ghost ? COLLIDE_ALL & ~MARBLE_CATEGORY : COLLIDE_ALL);
+    fixture.SetFilterData(filter);
+  }
+
+  setRadius(id: number, radius: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    // box2d는 만들어진 원의 반지름을 바꿀 수 없어서 픽스처를 떼고 다시 붙인다.
+    // 유령 상태(충돌 마스크)와 탄성은 그대로 이어받는다
+    const old = body.GetFixtureList();
+    const mask = old.GetFilterData().get_maskBits();
+    const restitution = old.GetRestitution();
+    const density = old.GetDensity();
+    body.DestroyFixture(old);
+    this.attachMarbleFixture(body, radius, density, restitution, mask);
+    body.SetAwake(true);
+  }
+
+  setRestitution(id: number, restitution: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    body.GetFixtureList().SetRestitution(restitution);
+  }
+
+  setMassScale(id: number, scale: number): void {
+    const body = this.marbleMap[id];
+    if (!body) return;
+    body.GetFixtureList().SetDensity(this.baseDensity[id] * scale);
+    body.ResetMassData();
+  }
+
+  private nearestAhead(id: number, maxDistance: number): { id: number; body: Box2D.b2Body } | null {
+    const src = this.marbleMap[id];
+    if (!src) return null;
+    const sy = src.GetPosition().y;
+    let best: { id: number; body: Box2D.b2Body } | null = null;
+    let bestDist = maxDistance;
+    for (const key of Object.keys(this.marbleMap)) {
+      const otherId = Number(key);
+      if (otherId === id) continue;
+      const body = this.marbleMap[otherId];
+      const p = body.GetPosition();
+      // "앞"은 더 아래(골에 가까운 쪽)
+      if (p.y <= sy) continue;
+      const d = Math.hypot(p.x - src.GetPosition().x, p.y - sy);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { id: otherId, body };
+      }
+    }
+    return best;
+  }
+
+  swapWithMarbleAhead(id: number, maxDistance: number): number | null {
+    const src = this.marbleMap[id];
+    const target = this.nearestAhead(id, maxDistance);
+    if (!src || !target) return null;
+    const a = src.GetPosition();
+    const b = target.body.GetPosition();
+    const ax = a.x;
+    const ay = a.y;
+    src.SetTransform(new this.Box2D.b2Vec2(b.x, b.y), src.GetAngle());
+    target.body.SetTransform(new this.Box2D.b2Vec2(ax, ay), target.body.GetAngle());
+    src.SetAwake(true);
+    target.body.SetAwake(true);
+    return target.id;
+  }
+
+  pushMarbleAhead(id: number, maxDistance: number, impulseY: number): number | null {
+    const target = this.nearestAhead(id, maxDistance);
+    if (!target) return null;
+    const mass = target.body.GetMass();
+    target.body.ApplyLinearImpulseToCenter(new this.Box2D.b2Vec2(0, impulseY * mass), true);
+    return target.id;
   }
 
   start(): void {

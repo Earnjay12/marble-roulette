@@ -1,4 +1,5 @@
-import { RPG_TRIGGER_RATE, SkillInfos, Skills, STUCK_DELAY, Themes } from './data/constants';
+import { MARBLE_RADIUS, RPG_TRIGGER_RATE, Skills, STUCK_DELAY, Themes } from './data/constants';
+import { drawSkillBadge, getSkillView } from './data/skills';
 import type { IPhysics } from './IPhysics';
 import options from './options';
 import type { ColorTheme } from './types/ColorTheme';
@@ -10,7 +11,7 @@ import { Vector } from './utils/Vector';
 export class Marble {
   type = 'marble' as const;
   name: string = '';
-  size: number = 0.5;
+  size: number = MARBLE_RADIUS * 2;
   color: string = 'red';
   hue: number = 0;
   impact: number = 0;
@@ -21,9 +22,11 @@ export class Marble {
   ability: Skills = Skills.None;
   isActive: boolean = false;
 
-  /** 지속 효과(깃털·무게추·유령)가 켜져 있으면 그 스킬, 남은 시간 */
+  /** 지속 효과(깃털·거대화 등)가 켜져 있으면 그 스킬, 남은 시간 */
   private _effectSkill: Skills = Skills.None;
   private _effectRemaining = 0;
+  /** 저주에 걸려 멈춰 있는 남은 시간 */
+  private _stunRemaining = 0;
 
   private _skillRate = 0.0005;
   private _coolTime = 5000;
@@ -97,8 +100,9 @@ export class Marble {
       this.impact = Math.max(0, this.impact - deltaTime);
     }
     this._updateEffect(deltaTime);
+    this._updateStun(deltaTime);
     if (!this.isActive) return;
-    if (options.useSkills) {
+    if (options.useSkills && this._stunRemaining <= 0) {
       this._updateSkillInformation(deltaTime);
     }
   }
@@ -107,10 +111,44 @@ export class Marble {
     return this._effectSkill;
   }
 
+  get isStunned(): boolean {
+    return this._stunRemaining > 0;
+  }
+
   /** 지속 효과를 시작한다. 실제 물리 변경은 roulette이 하고, 여기서는 만료만 관리한다 */
   startEffect(skill: Skills) {
     this._effectSkill = skill;
-    this._effectRemaining = SkillInfos[skill].duration ?? 0;
+    this._effectRemaining = getSkillView(skill).duration ?? 0;
+  }
+
+  /** 저주: 일정 시간 그 자리에 멈춘다. 중력도 끈다 */
+  stun(duration: number) {
+    this._stunRemaining = duration;
+    this.physics.freezeMarble(this.id);
+    this.physics.setGravityScale(this.id, 0);
+  }
+
+  private _gravityForEffect(): number {
+    switch (this._effectSkill) {
+      case Skills.Feather:
+        return 0.2;
+      case Skills.Anchor:
+        return 3;
+      case Skills.AntiGravity:
+        return -0.8;
+      default:
+        return 1;
+    }
+  }
+
+  private _updateStun(deltaTime: number) {
+    if (this._stunRemaining <= 0) return;
+    this._stunRemaining -= deltaTime;
+    // 다른 구슬이 밀어도 제자리를 지키게 매 프레임 속도를 죽인다
+    this.physics.freezeMarble(this.id);
+    if (this._stunRemaining <= 0) {
+      this.physics.setGravityScale(this.id, this._gravityForEffect());
+    }
   }
 
   private _updateEffect(deltaTime: number) {
@@ -118,16 +156,29 @@ export class Marble {
     this._effectRemaining -= deltaTime;
     if (this._effectRemaining > 0) return;
 
-    switch (this._effectSkill) {
+    const skill = this._effectSkill;
+    this._effectSkill = Skills.None;
+    switch (skill) {
       case Skills.Feather:
       case Skills.Anchor:
-        this.physics.setGravityScale(this.id, 1);
+      case Skills.AntiGravity:
+        if (this._stunRemaining <= 0) this.physics.setGravityScale(this.id, 1);
         break;
       case Skills.Ghost:
         this.physics.setGhost(this.id, false);
         break;
+      case Skills.Grow:
+      case Skills.Shrink:
+        this.physics.setRadius(this.id, MARBLE_RADIUS);
+        this.size = MARBLE_RADIUS * 2;
+        break;
+      case Skills.Bouncy:
+        this.physics.setRestitution(this.id, 0);
+        break;
+      case Skills.Titan:
+        this.physics.setMassScale(this.id, 1);
+        break;
     }
-    this._effectSkill = Skills.None;
   }
 
   private _updateSkillInformation(deltaTime: number) {
@@ -180,19 +231,14 @@ export class Marble {
 
   private _renderMinimap(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = this.color;
-    this._drawMarbleBody(ctx, true);
-  }
-
-  private _drawMarbleBody(ctx: CanvasRenderingContext2D, isMinimap: boolean) {
     ctx.beginPath();
-    ctx.arc(this.x, this.y, isMinimap ? this.size : this.size / 2, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
     ctx.fill();
   }
 
   private _renderNormal(ctx: CanvasRenderingContext2D, zoom: number, outline: boolean, skin?: CanvasImageSource) {
     const hs = this.size / 2;
-
-    ctx.fillStyle = `hsl(${this.hue} 100% ${this.theme.marbleLightness + 25 * Math.min(1, this.impact / 500)}%`;
+    const lightness = this.theme.marbleLightness + 25 * Math.min(1, this.impact / 500);
 
     // 유령 상태는 반투명하게 그려서 통과 중임을 보여준다
     if (this._effectSkill === Skills.Ghost) {
@@ -205,7 +251,7 @@ export class Marble {
         ctx.drawImage(skin, -hs, -hs, hs * 2, hs * 2);
       });
     } else {
-      this._drawMarbleBody(ctx, false);
+      this._drawStyledBody(ctx, hs, lightness);
     }
 
     ctx.globalAlpha = 1;
@@ -221,36 +267,152 @@ export class Marble {
       this._renderCoolTime(ctx, zoom);
     }
     if (options.skillMode === 'rpg') {
-      this._drawAbilityIcon(ctx, zoom);
+      this._drawAbilityBadge(ctx, zoom);
+    }
+    if (this._stunRemaining > 0) {
+      this._drawStunMark(ctx, zoom);
     }
   }
 
-  /** 능력 모드에서 구슬 머리 위에 붙는 스킬 아이콘 */
-  private _drawAbilityIcon(ctx: CanvasRenderingContext2D, zoom: number) {
-    const icon = SkillInfos[this.ability].icon;
-    if (!icon) return;
-    transformGuard(ctx, () => {
-      ctx.translate(this.x, this.y - this.size / 2 - 0.12);
-      ctx.scale(1 / zoom, 1 / zoom);
-      ctx.font = '13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(icon, 0, 0);
-    });
+  /** 테마마다 다른 구슬 모습. 단색·강철·보석·네온·연필 낙서 */
+  private _drawStyledBody(ctx: CanvasRenderingContext2D, hs: number, lightness: number) {
+    const { x, y } = this.position;
+    const hue = this.hue;
+    const circle = (r: number) => {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    };
+
+    switch (this.theme.marbleStyle) {
+      case 'steel': {
+        // 강철구슬: 왼쪽 위 하이라이트에서 어두운 테두리로 떨어지는 구면 음영
+        const g = ctx.createRadialGradient(x - hs * 0.35, y - hs * 0.35, hs * 0.05, x, y, hs);
+        g.addColorStop(0, '#ffffff');
+        g.addColorStop(0.35, `hsl(${hue} 55% ${lightness}%)`);
+        g.addColorStop(1, `hsl(${hue} 50% ${Math.max(18, lightness - 42)}%)`);
+        circle(hs);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.lineWidth = hs * 0.12;
+        ctx.strokeStyle = `hsl(${hue} 40% 22%)`;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.beginPath();
+        ctx.ellipse(x - hs * 0.4, y - hs * 0.45, hs * 0.2, hs * 0.12, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'gem': {
+        // 보석: 밝은 중심, 육각 면, 반짝임
+        const g = ctx.createRadialGradient(x - hs * 0.2, y - hs * 0.2, hs * 0.05, x, y, hs);
+        g.addColorStop(0, `hsl(${hue} 100% 93%)`);
+        g.addColorStop(0.55, `hsl(${hue} 100% ${lightness}%)`);
+        g.addColorStop(1, `hsl(${hue} 100% ${Math.max(20, lightness - 38)}%)`);
+        circle(hs);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.lineWidth = hs * 0.1;
+        ctx.strokeStyle = `hsl(${hue} 100% 28%)`;
+        ctx.stroke();
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i + Math.PI / 6;
+          const px = x + Math.cos(a) * hs * 0.62;
+          const py = y + Math.sin(a) * hs * 0.62;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.lineWidth = hs * 0.06;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.stroke();
+        this._drawSparkle(ctx, x - hs * 0.42, y - hs * 0.42, hs * 0.22);
+        break;
+      }
+      case 'neon': {
+        // 네온: 어두운 심에 빛나는 링
+        circle(hs);
+        ctx.fillStyle = `hsl(${hue} 60% 12%)`;
+        ctx.fill();
+        const ring = `hsl(${hue} 100% ${lightness}%)`;
+        ctx.shadowColor = ring;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = hs * 0.22;
+        ctx.strokeStyle = ring;
+        circle(hs * 0.88);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = hs * 0.08;
+        ctx.globalAlpha *= 0.8;
+        circle(hs * 0.45);
+        ctx.stroke();
+        ctx.globalAlpha /= 0.8;
+        break;
+      }
+      case 'sketch': {
+        // 연필 낙서: 종이색 바탕에 두 번 그은 테두리와 빗금
+        const line = `hsl(${hue} 70% 40%)`;
+        circle(hs);
+        ctx.fillStyle = '#fffdf5';
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = line;
+        ctx.lineWidth = hs * 0.06;
+        ctx.globalAlpha *= 0.45;
+        ctx.beginPath();
+        for (let i = -2; i <= 2; i++) {
+          ctx.moveTo(x - hs + i * hs * 0.45, y + hs);
+          ctx.lineTo(x + i * hs * 0.45 + hs * 0.2, y - hs);
+        }
+        ctx.stroke();
+        ctx.restore();
+        const jitter = ((this.id * 7) % 5) * 0.012 - 0.024;
+        ctx.strokeStyle = line;
+        ctx.lineWidth = hs * 0.14;
+        circle(hs);
+        ctx.stroke();
+        ctx.globalAlpha *= 0.5;
+        ctx.beginPath();
+        ctx.arc(x + jitter, y - jitter, hs * 0.96, 0.3, Math.PI * 2 + 0.3);
+        ctx.stroke();
+        ctx.globalAlpha /= 0.5;
+        break;
+      }
+      default:
+        circle(hs);
+        ctx.fillStyle = `hsl(${hue} 100% ${lightness}%)`;
+        ctx.fill();
+    }
+  }
+
+  private _drawSparkle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.quadraticCurveTo(cx, cy, cx + r, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy + r);
+    ctx.quadraticCurveTo(cx, cy, cx - r, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy - r);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
   }
 
   private _drawName(ctx: CanvasRenderingContext2D, zoom: number) {
-    transformGuard(ctx, () => {
-      ctx.font = `12pt sans-serif`;
-      ctx.strokeStyle = 'black';
-      ctx.lineWidth = 2;
-      ctx.fillStyle = this.color;
-      ctx.shadowBlur = 0;
-      ctx.translate(this.x, this.y + 0.25);
-      ctx.scale(1 / zoom, 1 / zoom);
-      ctx.strokeText(this.name, 0, 0);
-      ctx.fillText(this.name, 0, 0);
-    });
+    // 정렬·기준선을 여기서 직접 잡는다. 다른 그리기 코드가 바꿔 놓은 값이 새면 이름이 엉뚱한 곳에 찍힌다
+    ctx.save();
+    ctx.font = `bold 12pt ${this.theme.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur = 0;
+    ctx.translate(this.x, this.y + this.size / 2 + 0.04);
+    ctx.scale(1 / zoom, 1 / zoom);
+    ctx.strokeText(this.name, 0, 0);
+    ctx.fillText(this.name, 0, 0);
+    ctx.restore();
   }
 
   private _drawOutline(ctx: CanvasRenderingContext2D, lineWidth: number) {
@@ -267,5 +429,27 @@ export class Marble {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size / 2 + 2 / zoom, rad(270), rad(270 + (360 * this._coolTime) / this._maxCoolTime));
     ctx.stroke();
+  }
+
+  /** 능력 모드에서 구슬 머리 위에 붙는 스킬 배지 */
+  private _drawAbilityBadge(ctx: CanvasRenderingContext2D, zoom: number) {
+    if (this.ability === Skills.None) return;
+    ctx.save();
+    ctx.translate(this.x, this.y - this.size / 2);
+    ctx.scale(1 / zoom, 1 / zoom);
+    drawSkillBadge(ctx, this.ability, 0, -11, 17);
+    ctx.restore();
+  }
+
+  /** 저주에 걸려 멈춘 동안 두르는 점선 고리 */
+  private _drawStunMark(ctx: CanvasRenderingContext2D, zoom: number) {
+    ctx.save();
+    ctx.strokeStyle = '#6c5ce7';
+    ctx.lineWidth = 2 / zoom;
+    ctx.setLineDash([0.1, 0.07]);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size / 2 + 4 / zoom, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 }

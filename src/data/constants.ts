@@ -7,6 +7,9 @@ export const zoomThreshold = 5;
 export const STUCK_DELAY = 5000;
 export const winnerAreaHeight = 168;
 
+/** 구슬 기본 반지름. 거대화·축소 스킬이 끝나면 여기로 돌아온다 */
+export const MARBLE_RADIUS = 0.25;
+
 export enum Skills {
   None = 0,
   Impact = 1,
@@ -17,96 +20,22 @@ export enum Skills {
   Magnet = 6,
   Freeze = 7,
   Ghost = 8,
+  Grow = 9,
+  Shrink = 10,
+  Bouncy = 11,
+  Brake = 12,
+  Swap = 13,
+  Slap = 14,
+  SlowField = 15,
+  AntiGravity = 16,
+  Boost = 17,
+  Zigzag = 18,
+  Hex = 19,
+  Titan = 20,
 }
 
 /** 스킬 옵션. none=스킬 없음, basic=원본과 같은 폭발만, rpg=구슬마다 고유 능력 하나 */
 export type SkillMode = 'none' | 'basic' | 'rpg';
-
-export interface SkillInfo {
-  name: string;
-  icon: string;
-  color: string;
-  description: string;
-  /** 지속 효과(깃털·무게추·유령)의 유지 시간(ms). 없으면 즉발 */
-  duration?: number;
-  /** 이펙트 링의 최대 반지름(월드 단위). 주변에 영향을 주는 스킬은 크게 */
-  effectRadius: number;
-}
-
-export const SkillInfos: Record<Skills, SkillInfo> = {
-  [Skills.None]: { name: '없음', icon: '', color: '#ffffff', description: '', effectRadius: 0 },
-  [Skills.Impact]: {
-    name: '폭발',
-    icon: '💥',
-    color: '#ff9f43',
-    description: '주변 구슬을 사방으로 밀어낸다',
-    effectRadius: 10,
-  },
-  [Skills.Dash]: {
-    name: '돌진',
-    icon: '🚀',
-    color: '#ff6b6b',
-    description: '아래로 세게 가속한다',
-    effectRadius: 3,
-  },
-  [Skills.Jump]: {
-    name: '도약',
-    icon: '🦘',
-    color: '#54e346',
-    description: '위로 튀어 오른다. 앞서갈 수도, 뒤처질 수도 있다',
-    effectRadius: 3,
-  },
-  [Skills.Feather]: {
-    name: '깃털',
-    icon: '🪶',
-    color: '#dfe6e9',
-    description: '잠시 깃털처럼 천천히 떨어진다',
-    duration: 1500,
-    effectRadius: 3,
-  },
-  [Skills.Anchor]: {
-    name: '무게추',
-    icon: '⚓',
-    color: '#a4b0be',
-    description: '잠시 무거워져 빠르게 떨어진다',
-    duration: 1500,
-    effectRadius: 3,
-  },
-  [Skills.Magnet]: {
-    name: '자석',
-    icon: '🧲',
-    color: '#e84393',
-    description: '주변 구슬을 자기 쪽으로 끌어당긴다',
-    effectRadius: 10,
-  },
-  [Skills.Freeze]: {
-    name: '얼음',
-    icon: '❄️',
-    color: '#74b9ff',
-    description: '주변 구슬을 그 자리에 멈춰 세운다',
-    effectRadius: 6,
-  },
-  [Skills.Ghost]: {
-    name: '유령',
-    icon: '👻',
-    color: '#c8d6e5',
-    description: '잠시 다른 구슬을 통과한다',
-    duration: 1500,
-    effectRadius: 3,
-  },
-};
-
-/** 능력 모드에서 구슬에 나눠 주는 스킬 목록 */
-export const RPG_SKILL_POOL: Skills[] = [
-  Skills.Impact,
-  Skills.Dash,
-  Skills.Jump,
-  Skills.Feather,
-  Skills.Anchor,
-  Skills.Magnet,
-  Skills.Freeze,
-  Skills.Ghost,
-];
 
 /** 능력 모드에서 쿨타임이 찼을 때 스킬이 발동할 확률 */
 export const RPG_TRIGGER_RATE = 0.7;
@@ -141,6 +70,9 @@ export const Themes: Record<string, ColorTheme> = {
     winnerBackground: 'rgba(255, 255, 255, 0.5)',
     winnerOutline: 'black',
     winnerText: '#cccccc',
+    marbleStyle: 'flat',
+    entityStyle: 'plain',
+    font: 'sans-serif',
   },
   // 기본: 원본의 다크 모드 그대로
   dark: {
@@ -160,8 +92,11 @@ export const Themes: Record<string, ColorTheme> = {
     winnerBackground: 'rgba(0, 0, 0, 0.5)',
     winnerOutline: 'black',
     winnerText: 'white',
+    marbleStyle: 'flat',
+    entityStyle: 'plain',
+    font: 'sans-serif',
   },
-  // 핀볼: 짙은 초록 펠트 위의 주황 범퍼와 크롬 레일
+  // 핀볼: 짙은 초록 펠트 위의 주황 범퍼, 크롬 레일, 강철 구슬
   pinball: {
     background: '#0d2418',
     marbleLightness: 68,
@@ -181,8 +116,11 @@ export const Themes: Record<string, ColorTheme> = {
     winnerText: '#ffd54f',
     pattern: 'dots',
     patternColor: 'rgba(255, 255, 255, 0.07)',
+    marbleStyle: 'steel',
+    entityStyle: 'pinball',
+    font: "'Impact', 'Arial Black', sans-serif",
   },
-  // 판타지: 보랏빛 밤하늘, 황금·에메랄드·라벤더
+  // 판타지: 보랏빛 밤하늘, 황금·에메랄드·라벤더, 보석 구슬
   fantasy: {
     background: '#160b2b',
     marbleLightness: 74,
@@ -202,8 +140,11 @@ export const Themes: Record<string, ColorTheme> = {
     winnerText: '#ffe9a6',
     pattern: 'stars',
     patternColor: 'rgba(255, 240, 200, 0.8)',
+    marbleStyle: 'gem',
+    entityStyle: 'fantasy',
+    font: "'Georgia', 'Batang', serif",
   },
-  // 미래도시: 남색 바탕에 네온 시안·마젠타, 강한 번짐
+  // 미래도시: 남색 바탕에 네온 시안·마젠타, 강한 번짐, 네온 링 구슬
   cyber: {
     background: '#04060f',
     marbleLightness: 75,
@@ -223,8 +164,11 @@ export const Themes: Record<string, ColorTheme> = {
     winnerText: '#00f0ff',
     pattern: 'grid',
     patternColor: 'rgba(0, 240, 255, 0.09)',
+    marbleStyle: 'neon',
+    entityStyle: 'cyber',
+    font: "'Consolas', 'Courier New', monospace",
   },
-  // 낙서: 공책 종이 위에 연필과 빨간 펜
+  // 낙서: 공책 종이 위에 연필과 빨간 펜, 손으로 그린 구슬
   doodle: {
     background: '#fbf7ea',
     marbleLightness: 50,
@@ -244,5 +188,8 @@ export const Themes: Record<string, ColorTheme> = {
     winnerText: '#2d3436',
     pattern: 'paper',
     patternColor: 'rgba(9, 132, 227, 0.25)',
+    marbleStyle: 'sketch',
+    entityStyle: 'sketch',
+    font: "'Comic Sans MS', 'Segoe Print', 'Malgun Gothic', cursive",
   },
 };

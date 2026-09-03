@@ -503,20 +503,22 @@ div.toast {
   border-radius: 10px;
 }
 
-// 스킬 모드 행의 능력표 버튼. 능력 모드일 때만 보인다
-#settings .btn-group .btn-abilities {
+// 섞기·시작 옆의 능력표 버튼. 능력 모드일 때만 보인다
+#settings .actions .btn-abilities {
   display: none;
-  flex: 0 0 auto;
-  margin-left: 4px;
-  padding: 0 10px;
-  border-radius: 10px;
   background: #ffb300;
   color: #222;
   font-weight: bold;
 
   &.visible {
-    display: flex;
+    display: inline-flex;
+    align-items: center;
   }
+}
+
+// 스킬 행은 버튼 세 개가 넉넉히 들어가게 칼럼 폭을 확보한다
+#settings div.right {
+  min-width: 360px;
 }
 
 // 구슬 능력표 창
@@ -565,7 +567,7 @@ div.toast {
 
   .legend li {
     display: grid;
-    grid-template-columns: 28px 64px 1fr;
+    grid-template-columns: 30px 88px 1fr;
     gap: 6px;
     align-items: center;
     padding: 3px 0;
@@ -609,6 +611,10 @@ div.toast {
     .sk {
       color: #aaa;
       font-size: 9pt;
+    }
+
+    .badge {
+      flex: 0 0 auto;
     }
   }
 

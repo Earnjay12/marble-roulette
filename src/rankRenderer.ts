@@ -1,4 +1,5 @@
-import { SkillInfos } from './data/constants';
+import { Skills } from './data/constants';
+import { drawSkillBadge } from './data/skills';
 import type { Marble } from './marble';
 import options, { type WinnerRange } from './options';
 import type { RenderParameters } from './rouletteRenderer';
@@ -76,12 +77,13 @@ export class RankRenderer implements UIObject {
 
     ctx.save();
     ctx.textAlign = 'right';
-    ctx.font = '10pt sans-serif';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = `10pt ${theme.font}`;
     ctx.fillStyle = '#666';
     ctx.fillText(`${winners.length} / ${winners.length + marbles.length}`, width - 5, this.fontHeight);
 
     ctx.beginPath();
-    ctx.rect(width - 150, this.fontHeight + 2, width, this.maxY);
+    ctx.rect(width - 190, this.fontHeight + 2, width, this.maxY);
     ctx.clip();
 
     ctx.translate(0, -startY);
@@ -90,38 +92,39 @@ export class RankRenderer implements UIObject {
       ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
       const bandY = winnerRange.start * this.fontHeight + this.fontHeight / 2;
       const bandH = (winnerRange.end - winnerRange.start + 1) * this.fontHeight;
-      ctx.fillRect(width - 150, bandY, 150, bandH);
+      ctx.fillRect(width - 190, bandY, 190, bandH);
       ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-      ctx.fillRect(width - 150, bandY, 3, bandH);
+      ctx.fillRect(width - 190, bandY, 3, bandH);
     }
 
-    ctx.font = 'bold 11pt sans-serif';
+    // 능력 모드에서는 이름 왼쪽에 능력 배지를 붙여 목록에서도 한눈에 보이게 한다
+    const showBadge = options.skillMode === 'rpg';
+    const drawRow = (marble: Marble, text: string, y: number) => {
+      ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
+      if (theme.rankStroke) ctx.strokeText(text, startX, 20 + y);
+      ctx.fillText(text, startX, 20 + y);
+      if (showBadge && marble.ability !== Skills.None) {
+        const textWidth = ctx.measureText(text).width;
+        drawSkillBadge(ctx, marble.ability, startX - textWidth - 10, 20 + y - 5, 14);
+      }
+    };
+
+    ctx.font = `bold 11pt ${theme.font}`;
     if (theme.rankStroke) {
       ctx.lineWidth = 2;
       ctx.strokeStyle = theme.rankStroke;
     }
-    // 능력 모드에서는 이름 앞에 능력 아이콘을 붙여 목록에서도 한눈에 보이게 한다
-    const label = (marble: Marble) =>
-      options.skillMode === 'rpg' && SkillInfos[marble.ability].icon
-        ? `${SkillInfos[marble.ability].icon} ${marble.name}`
-        : marble.name;
     winners.forEach((marble, rank) => {
       const y = rank * this.fontHeight;
       if (y >= startY && y <= startY + ctx.canvas.height) {
-        ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
-        const text = `${this.isWinningRank(rank) ? '☆' : '✔'} ${label(marble)} #${rank + 1}`;
-        ctx.strokeText(text, startX, 20 + y);
-        ctx.fillText(text, startX, 20 + y);
+        drawRow(marble, `${this.isWinningRank(rank) ? '☆' : '✔'} ${marble.name} #${rank + 1}`, y);
       }
     });
-    ctx.font = '10pt sans-serif';
+    ctx.font = `10pt ${theme.font}`;
     marbles.forEach((marble, rank) => {
       const y = (rank + winners.length) * this.fontHeight;
       if (y >= startY && y <= startY + ctx.canvas.height) {
-        ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
-        const text = `${label(marble)} #${rank + 1 + winners.length}`;
-        ctx.strokeText(text, startX, 20 + y);
-        ctx.fillText(text, startX, 20 + y);
+        drawRow(marble, `${marble.name} #${rank + 1 + winners.length}`, y);
       }
     });
     ctx.restore();

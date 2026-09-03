@@ -217,14 +217,14 @@
     const renderAbilities = () => {
       document.querySelector('#abilityLegend').innerHTML = window.roulette
         .getSkillList()
-        .map((s) => `<li><span class="ic">${s.icon}</span><b>${s.name}</b><span class="desc">${s.description}</span></li>`)
+        .map((s) => `<li>${s.svg}<b>${s.name}</b><span class="desc">${s.description}</span></li>`)
         .join('');
       document.querySelector('#abilityList').innerHTML = window.roulette
         .getMarbleAbilities()
         .map(
           (m) =>
             `<li><span class="dot" style="background: hsl(${m.hue} 100% 60%)"></span>` +
-            `<span class="nm">${escapeHtml(m.name)}</span><span class="ic">${m.icon}</span><span class="sk">${m.skillName}</span></li>`
+            `<span class="nm">${escapeHtml(m.name)}</span>${m.svg}<span class="sk">${m.skillName}</span></li>`
         )
         .join('');
     };
@@ -346,7 +346,6 @@
           <button class="btn-skill" data-skill="none" data-trans>None</button>
           <button class="btn-skill active" data-skill="basic" data-trans>Basic</button>
           <button class="btn-skill" data-skill="rpg" data-trans>Abilities</button>
-          <button id="btnAbilities" class="btn-abilities" data-trans>List</button>
         </div>
       </div>
       <div class="row">
@@ -388,6 +387,8 @@
     <h3 data-trans>Enter names below</h3>
     <textarea id="in_names" placeholder="Input names separated by commas or line feed here" data-trans="placeholder">수박*2,키위*2,귤*2</textarea>
     <div class="actions">
+      <button id="btnAbilities" class="btn-abilities" data-trans>List</button>
+      <div class="sep"></div>
       <button id="btnShuffle">
         <i class="icon shuffle"></i>
         <span data-trans>Shuffle</span>
