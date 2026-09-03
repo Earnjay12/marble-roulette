@@ -5,8 +5,15 @@ import type { StageDef } from './maps';
  * 직접 만든 맵들. 손으로 좌표를 나열하는 대신 작은 헬퍼로 조립한다.
  *
  * 좌표계: x는 0~26(미니맵 폭), y는 아래로 갈수록 커진다. 구슬은 x 10~16, y 1~5 근처에서 생성되므로
- * 모든 맵은 위쪽에 x 9~17 통로를 두고 y 8.5부터 넓어진다. box의 width/height는 절반 크기(half extent),
- * rotation은 라디안이고 양수면 화면에서 시계 방향으로 기운다(오른쪽 끝이 내려간다). 구슬 반지름은 0.25.
+ * 모든 맵은 위쪽에 x 9~17 통로를 두고 y 8.5부터 본 코스로 이어진다. box의 width/height는 절반 크기
+ * (half extent), rotation은 라디안이고 양수면 화면에서 시계 방향으로 기운다(오른쪽 끝이 내려간다).
+ * 구슬 반지름은 0.25.
+ *
+ * 재미의 원칙(원본 맵에서 배운 것):
+ * - 폭은 10칸 안팎으로 좁게. 넓으면 장애물을 피해 그냥 떨어진다.
+ * - 벽을 타고 내려가는 직선 통로를 남기지 않는다. 벽에 안쪽으로 기운 톱니를 붙인다.
+ * - 풍차는 6~10 rad/s로 빠르게. 범퍼는 restitution 1.3 이상. 거품(life)은 라운드마다 코스를 바꾼다.
+ * - 출구 목에서 천천히 도는 막대가 도착 순서를 마지막에 한 번 더 섞는다.
  */
 
 const NO_PROPS = { density: 1, angularVelocity: 0, restitution: 0 };
@@ -59,6 +66,42 @@ function bumper(x: number, y: number, radius: number, restitution = 1.2, life?: 
     props: { density: 1, angularVelocity: 0, restitution, ...(life ? { life } : {}) },
     shape: { type: 'circle', radius },
   };
+}
+
+/**
+ * 벽에 붙은 톱니. 벽을 타고 내려오는 구슬을 가운데로 튕겨낸다.
+ * length 2.2, angle 0.6이면 안쪽으로 1.8칸, 아래로 1.2칸 뻗는다
+ */
+function teeth(
+  left: number,
+  right: number,
+  ys: number[],
+  side: 'left' | 'right' | 'both' = 'both',
+  length = 2.2,
+  angle = 0.6
+): MapEntity[] {
+  const half = length / 2;
+  const dx = half * Math.cos(angle);
+  const dy = half * Math.sin(angle);
+  const out: MapEntity[] = [];
+  for (const y of ys) {
+    if (side !== 'right') out.push(plate(left + dx, y + dy, half, angle, 0.3));
+    if (side !== 'left') out.push(plate(right - dx, y + dy, half, -angle, 0.3));
+  }
+  return out;
+}
+
+/** 생성 통로 바로 아래의 소형 풍차 두 개. 뭉쳐서 떨어지는 구슬 더미를 첫 순간부터 흩는다 */
+function openingMixers(): MapEntity[] {
+  return [spinner(11.5, 11, 0.6, 10), spinner(14.5, 11, 0.6, -10)];
+}
+
+/**
+ * 출구 목에서 천천히 도는 막대. 원본 첫 맵의 마지막 바퀴와 같은 장치로, 깔때기에 모인 구슬을
+ * 막았다 풀었다 하며 도착 순서를 뒤섞는다. 중심은 왼쪽 경사면 바깥에 두고 끝만 목을 쓸고 지나간다
+ */
+function gateWheel(goalY: number, speed = 1.3, exitLeft = 12): MapEntity {
+  return spinner(exitLeft - 1.1, goalY - 1.5, 2.2, speed);
 }
 
 /** 위쪽 생성 통로(x 9~17)에서 시작해 좌우 벽을 따라 내려가 바닥 깔때기와 출구까지 이어지는 양쪽 벽 */
@@ -117,95 +160,132 @@ function pegGrid(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// 1. 지그재그 폭포: 좌우로 번갈아 기운 긴 경사면을 타고 내려간다
+// 1. 지그재그 폭포: 좁은 협곡에서 짧고 가파른 경사면을 번갈아 타고, 낙하 지점마다 풍차에 맞는다
 // ---------------------------------------------------------------------------
 function zigzagFalls(): StageDef {
-  const goalY = 92;
-  const entities: MapEntity[] = [...outerWalls({ left: 2, right: 24, widenAt: 14, funnelAt: 82, goalY })];
+  const goalY = 94;
+  const left = 8;
+  const right = 18;
+  const entities: MapEntity[] = [
+    ...outerWalls({ left, right, widenAt: 14, funnelAt: goalY - 5.5, goalY }),
+    ...openingMixers(),
+  ];
 
-  const tilt = 0.25; // 약 14도. 더 완만하면 한 판에 4초 넘게 걸려 지루하다
-  const half = 8;
-  // 경사면 중심 y. 왼쪽 벽에서 시작해 오른쪽으로 내려가는 판과 그 반대를 번갈아 둔다
-  const rampRows = [19, 33, 47, 61];
-  rampRows.forEach((y, i) => {
-    const toRight = i % 2 === 0;
-    // 판 끝이 벽에 닿도록 중심을 잡는다 (길이 16, 벽 안쪽 폭 22 → 반대쪽에 6칸 낙하 구간)
-    const cx = toRight ? 2 + half : 24 - half;
-    entities.push(plate(cx, y, half, toRight ? tilt : -tilt));
-    // 낙하 구간에 못 몇 개를 흩어 두어 떨어지는 방향을 흔든다
-    const dropX = toRight ? 21 : 5;
-    entities.push(peg(dropX - 1.2, y + 6), peg(dropX + 1.2, y + 6), peg(dropX, y + 8.5));
+  const tilt = 0.45; // 약 26도
+  const half = 3.25; // 길이 6.5. 폭 10에서 반대쪽에 4칸 낙하 구간이 남는다
+  const dx = half * Math.cos(tilt);
+  const rows = [18, 26, 34, 42, 50, 58, 66];
+  rows.forEach((y, i) => {
+    const fromLeft = i % 2 === 0;
+    entities.push(fromLeft ? plate(left + dx, y, half, tilt) : plate(right - dx, y, half, -tilt));
+    // 낙하 구간: 빠른 풍차가 떨어지는 구슬을 아무 방향으로나 쳐내고, 못 두 개가 한 번 더 흔든다
+    const gapCenter = fromLeft ? right - 2 : left + 2;
+    entities.push(spinner(gapCenter, y + 3.2, 1.1, fromLeft ? 8 : -8));
+    entities.push(peg(gapCenter - 1.1, y + 5.8, 0.2, 0.8), peg(gapCenter + 1.1, y + 5.8, 0.2, 0.8));
   });
 
-  // 경사면 바로 위에서 돌아가는 풍차. 굴러가는 구슬을 쳐서 순서를 뒤섞는다.
-  // 더 빠르면 구슬을 경사면 위쪽으로 되던져서 마지막 골인이 한참 늦어진다
-  entities.push(spinner(14, 32, 1.6, 1.5), spinner(12, 45.9, 1.6, -1.5));
-
-  // 마지막 갈톤 보드
-  entities.push(...pegGrid({ xStart: 4, xEnd: 22, yStart: 71, rows: 3, colGap: 3, rowGap: 2.6 }));
+  // 경사면이 끝난 뒤 범퍼 삼각형과 톱니.
+  // 톱니는 못·범퍼와 높이를 겹치면 안 된다. 톱니 윗면과 못 사이에 구슬이 끼어 멈춘 적이 있다
+  entities.push(bumper(10.5, 76, 0.8, 1.4), bumper(15.5, 76, 0.8, 1.4), bumper(13, 81, 0.9, 1.4));
+  entities.push(...teeth(left, right, [70, 85]));
+  entities.push(gateWheel(goalY, 1.3));
 
   return { title: 'Zigzag Falls', goalY, zoomY: goalY - 4.5, entities };
 }
 
 // ---------------------------------------------------------------------------
-// 2. 핀볼 정원: 촘촘한 못 격자 → 범퍼 삼각형 → 풍차
+// 2. 핀볼 정원: 벽까지 꽉 채운 못 격자 → 터지는 거품 → 풍차와 범퍼
 // ---------------------------------------------------------------------------
 function pinballGarden(): StageDef {
-  const goalY = 110;
-  const entities: MapEntity[] = [...outerWalls({ left: 3, right: 23, widenAt: 14, funnelAt: 100, goalY })];
+  const goalY = 96;
+  const left = 8;
+  const right = 18;
+  const entities: MapEntity[] = [
+    ...outerWalls({ left, right, widenAt: 14, funnelAt: goalY - 5.5, goalY }),
+    ...openingMixers(),
+  ];
 
-  entities.push(...pegGrid({ xStart: 4.6, xEnd: 21.4, yStart: 18, rows: 22, colGap: 2.4, rowGap: 2.6, size: 0.18 }));
+  // 못은 벽에서 1.4칸 띄운다. 벽에 너무 붙이면 벽과 못의 비스듬한 면 사이에 V자 홈이 생겨
+  // 구슬이 끼어 멈춘다. 벽을 타고 내려오는 구슬은 격자 사이에 끼워 넣은 톱니가 안쪽으로 밀어낸다
+  entities.push(
+    ...pegGrid({ xStart: 9.4, xEnd: 16.6, yStart: 19, rows: 14, colGap: 1.8, rowGap: 2.2, size: 0.2, restitution: 0.7 })
+  );
+  // 못 줄(2.2칸 간격) 사이 빈틈에 정확히 들어가는 높이. 못과 겹치면 또 홈이 된다
+  entities.push(...teeth(left, right, [23.9, 32.7, 41.5]));
 
-  // 못 격자 아래 범퍼 삼각형. 세게 튕겨서 순위를 뒤집는다
-  entities.push(bumper(13, 80, 1.0, 1.3), bumper(8.5, 86, 0.9, 1.3), bumper(17.5, 86, 0.9, 1.3));
+  // 두 번 맞으면 터지는 거품. 앞선 구슬이 터뜨린 자리를 뒤 구슬은 그냥 지나가므로 라운드마다 다르다
+  const bubbles: [number, number][] = [
+    [9.5, 52],
+    [12, 52],
+    [14.5, 52],
+    [17, 52],
+    [10.75, 56],
+    [13.25, 56],
+    [15.75, 56],
+  ];
+  bubbles.forEach(([x, y]) => entities.push(bumper(x, y, 0.6, 1.4, 2)));
 
-  // 범퍼 사이로 빠진 구슬을 흔드는 풍차
-  entities.push(spinner(6, 94, 1.4, 6), spinner(13, 96, 1.6, -4), spinner(20, 94, 1.4, 6));
+  entities.push(...teeth(left, right, [60, 72]));
+  entities.push(spinner(10.5, 65, 1.4, 8), spinner(15.5, 65, 1.4, -8));
+  entities.push(bumper(13, 71, 0.9, 1.4), bumper(9.8, 77, 0.8, 1.4), bumper(16.2, 77, 0.8, 1.4));
+  entities.push(...teeth(left, right, [82]));
+  entities.push(gateWheel(goalY, 1.3));
 
   return { title: 'Pinball Garden', goalY, zoomY: goalY - 4.5, entities };
 }
 
 // ---------------------------------------------------------------------------
-// 3. 풍차 마을: 풍차가 층층이 돌아가는 사이를 빠져나간다
+// 3. 풍차 마을: 폭을 거의 다 쓰는 빠른 풍차가 층층이 돌고, 벽 옆은 톱니가 막는다
 // ---------------------------------------------------------------------------
 function windmillVillage(): StageDef {
-  const goalY = 122;
-  const entities: MapEntity[] = [...outerWalls({ left: 2, right: 24, widenAt: 14, funnelAt: 112, goalY })];
+  const goalY = 100;
+  const left = 8;
+  const right = 18;
+  const entities: MapEntity[] = [
+    ...outerWalls({ left, right, widenAt: 14, funnelAt: goalY - 5.5, goalY }),
+    ...openingMixers(),
+  ];
 
-  const rows = [20, 32, 44, 56, 68, 80, 92];
+  const speeds = [6, 8, 7, 9, 6, 8, 7, 9, 6];
+  const rows = [18, 25, 32, 39, 46, 53, 60, 67, 74];
   rows.forEach((y, i) => {
-    const xs = i % 2 === 0 ? [7, 13, 19] : [10, 16];
-    const speed = 2 + (i % 3);
-    xs.forEach((x, j) => entities.push(spinner(x, y, 2.1, (j % 2 === 0 ? 1 : -1) * speed)));
-    // 벽 쪽으로 몰린 구슬을 가운데로 돌려보내는 마름모
-    const dy = y + 6;
+    const speed = speeds[i] * (i % 4 < 2 ? 1 : -1);
     if (i % 2 === 0) {
-      entities.push(peg(4, dy, 0.9, 0.3), peg(22, dy, 0.9, 0.3));
+      // 큰 풍차 하나가 가운데 4.8칸을 쓸고, 양쪽 벽 톱니가 나머지를 막는다
+      entities.push(spinner(13, y, 2.4, speed));
+      entities.push(...teeth(left, right, [y - 1.2]));
     } else {
-      entities.push(peg(13, dy, 0.9, 0.3));
+      // 작은 풍차 둘 사이에 큰 못
+      entities.push(spinner(10.5, y, 1.5, -speed), spinner(15.5, y, 1.5, speed));
+      entities.push(peg(13, y, 0.35, 0.8));
     }
   });
 
-  entities.push(...pegGrid({ xStart: 4, xEnd: 22, yStart: 102, rows: 3, colGap: 3, rowGap: 2.6 }));
+  entities.push(bumper(11, 82, 0.8, 1.4), bumper(15, 82, 0.8, 1.4));
+  entities.push(...teeth(left, right, [86]));
+  entities.push(gateWheel(goalY, 1.3));
 
   return { title: 'Windmill Village', goalY, zoomY: goalY - 4.5, entities };
 }
 
 // ---------------------------------------------------------------------------
-// 4. 모래시계 계단: 깔때기를 여러 번 통과하며 매번 좁은 틈으로 모인다
+// 4. 모래시계 계단: 깔때기가 모으고, 목의 풍차가 흩뿌리고, 범퍼가 다시 벌린다. 이걸 네 번 반복
 // ---------------------------------------------------------------------------
 function hourglassStairs(): StageDef {
-  const goalY = 104;
-  const left = 1.5;
-  const right = 24.5;
-  const entities: MapEntity[] = [...outerWalls({ left, right, widenAt: 14, funnelAt: 94, goalY })];
+  const goalY = 100;
+  const left = 4;
+  const right = 22;
+  const entities: MapEntity[] = [
+    ...outerWalls({ left, right, widenAt: 14, funnelAt: goalY - 7, goalY }),
+    ...openingMixers(),
+  ];
 
   // [윗변 y, 아랫변 y, 틈 왼쪽 x, 틈 오른쪽 x]. 틈 위치를 가운데→왼쪽→오른쪽→가운데로 옮긴다
   const funnels: [number, number, number, number][] = [
-    [18, 26, 11.5, 14.5],
-    [32, 40, 4, 7],
-    [46, 54, 19, 22],
-    [60, 68, 11.5, 14.5],
+    [18, 26, 11.75, 14.25],
+    [34, 42, 6, 8.5],
+    [50, 58, 17.5, 20],
+    [66, 74, 11.75, 14.25],
   ];
   funnels.forEach(([top, bottom, gapL, gapR], i) => {
     entities.push(
@@ -218,23 +298,32 @@ function hourglassStairs(): StageDef {
         [gapR, bottom],
       ])
     );
-    // 틈 바로 아래 풍차가 떨어지는 구슬을 흩뿌린다
-    entities.push(spinner((gapL + gapR) / 2, bottom + 2.2, 1.2, i % 2 === 0 ? 7 : -7));
+    // 목 바로 아래의 빠른 풍차. 틈보다 길어서 구슬을 막았다가 아무 방향으로나 던진다
+    const center = (gapL + gapR) / 2;
+    entities.push(spinner(center, bottom + 1.4, 1.4, i % 2 === 0 ? 9 : -9));
+    // 그 아래 범퍼 세 개가 구슬을 다시 폭 전체로 벌려 놓는다
+    const bx = [center - 4, center, center + 4].map((x) => Math.min(right - 1.5, Math.max(left + 1.5, x)));
+    bx.forEach((x, j) => entities.push(bumper(x, bottom + 5.5 + (j === 1 ? 1.5 : 0), 0.7, 1.4)));
   });
 
-  // 거품 범퍼: 한 번 맞으면 터진다
+  // 한 번 맞으면 터지는 거품 밭
   const bubbles: [number, number][] = [
-    [7, 76],
-    [11, 76],
-    [15, 76],
-    [19, 76],
-    [9, 80],
-    [13, 80],
-    [17, 80],
+    [6, 79],
+    [9, 79],
+    [12, 79],
+    [15, 79],
+    [18, 79],
+    [21, 79],
+    [7.5, 82.5],
+    [10.5, 82.5],
+    [13.5, 82.5],
+    [16.5, 82.5],
+    [19.5, 82.5],
   ];
   bubbles.forEach(([x, y]) => entities.push(bumper(x, y, 0.7, 1.5, 1)));
 
-  entities.push(...pegGrid({ xStart: 4, xEnd: 22, yStart: 86, rows: 3, colGap: 3, rowGap: 2.4 }));
+  entities.push(...teeth(left, right, [87]));
+  entities.push(gateWheel(goalY, 1.3));
 
   return { title: 'Hourglass Stairs', goalY, zoomY: goalY - 4.5, entities };
 }
