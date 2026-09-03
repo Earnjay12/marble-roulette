@@ -24,7 +24,7 @@ export interface IPhysics {
   impact(id: number): void;
 
   /** 주변 구슬을 끌어당긴다 (자석) */
-  attract(id: number): void;
+  attract(id: number, power?: number): void;
 
   /** 반지름 안의 다른 구슬을 그 자리에 멈춘다 (얼음) */
   freezeAround(id: number, radius: number): void;

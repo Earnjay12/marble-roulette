@@ -69,7 +69,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '깃털',
     description: '잠시 깃털처럼 천천히 떨어진다',
     color: '#dfe6e9',
-    duration: 1500,
+    duration: 2000,
     effectRadius: 3,
     effect: 'float',
     icon: 'M21 3c-7 0-13 4-15 11l-4 7 2 1 3-5c7 0 12-4 14-11V3zM9 15l7-7 1 1-7 7z',
@@ -79,7 +79,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '무게추',
     description: '잠시 무거워져 빠르게 떨어진다',
     color: '#a4b0be',
-    duration: 1500,
+    duration: 2000,
     effectRadius: 3,
     effect: 'drop',
     icon: 'M12 2a3 3 0 00-1 5.8V9H8v2h3v8.9C8.5 19.5 6.5 17.5 6 15H4c.6 4 4 7 8 7s7.4-3 8-7h-2c-.5 2.5-2.5 4.5-5 4.9V11h3V9h-3V7.8A3 3 0 0012 2zm0 2a1 1 0 110 2 1 1 0 010-2z',
@@ -106,7 +106,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '유령',
     description: '잠시 다른 구슬을 통과한다',
     color: '#c8d6e5',
-    duration: 1500,
+    duration: 2500,
     effectRadius: 3,
     effect: 'fade',
     icon: 'M12 2a8 8 0 00-8 8v12l2.7-2.2L9.3 22l2.7-2.2 2.7 2.2 2.6-2.2L20 22V10a8 8 0 00-8-8zm-3 7a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm6 0a1.5 1.5 0 110 3 1.5 1.5 0 010-3z',
@@ -116,7 +116,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '거대화',
     description: '잠시 커져서 좁은 틈은 못 가지만 남을 밀어낸다',
     color: '#f9ca24',
-    duration: 2000,
+    duration: 2500,
     effectRadius: 4,
     effect: 'grow',
     icon: 'M3 3h7L7.5 5.5 11 9 9 11 5.5 7.5 3 10zM14 3h7v7l-2.5-2.5L15 11l-2-2 3.5-3.5zM3 14l2.5 2.5L9 13l2 2-3.5 3.5L10 21H3zM21 14v7h-7l2.5-2.5L13 15l2-2 3.5 3.5z',
@@ -125,7 +125,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '축소',
     description: '잠시 작아져서 좁은 틈을 빠져나간다',
     color: '#00cec9',
-    duration: 2000,
+    duration: 2500,
     effectRadius: 3,
     effect: 'shrink',
     icon: 'M10 10V4L8 6 4.5 2.5 2.5 4.5 6 8 4 10zM14 10h6l-2-2 3.5-3.5-2-2L16 6l-2-2zM10 14H4l2 2-3.5 3.5 2 2L8 18l2 2zM14 14v6l2-2 3.5 3.5 2-2L18 16l2-2z',
@@ -134,7 +134,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '탱탱볼',
     description: '잠시 고무공처럼 세게 튕긴다',
     color: '#fd79a8',
-    duration: 2500,
+    duration: 3000,
     effectRadius: 3,
     effect: 'bounce',
     icon: 'M12 3a5 5 0 110 10 5 5 0 010-10zM4 17c2.5 2 5 3 8 3s5.5-1 8-3l1.5 1.5C18.5 21 15.5 22 12 22s-6.5-1-9.5-3.5z',
@@ -177,7 +177,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '반중력',
     description: '잠깐 중력이 뒤집혀 위로 떠오른다',
     color: '#55efc4',
-    duration: 700,
+    duration: 900,
     effectRadius: 3,
     effect: 'rise',
     icon: 'M12 2l7 8h-4v7h-6v-7H5zM4 20h16v2H4z',
@@ -211,7 +211,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     name: '거인',
     description: '잠시 아주 무거워져 남이 밀어내지 못한다',
     color: '#b2bec3',
-    duration: 2500,
+    duration: 3000,
     effectRadius: 3,
     effect: 'shield',
     icon: 'M12 1l9 4v6c0 5.5-3.8 10.5-9 12-5.2-1.5-9-6.5-9-12V5zm0 3.2L5 7v4c0 4.2 2.8 8.1 7 9.4 4.2-1.3 7-5.2 7-9.4V7z',
@@ -376,6 +376,28 @@ export function drawSkillBadge(
   ctx.scale(scale, scale);
   ctx.fillStyle = '#ffffff';
   ctx.fill(iconPath(skill), view.iconRule ?? 'nonzero');
+  ctx.restore();
+}
+
+/**
+ * 배지 없이 그림만 그린다. 구슬 안에 크게 넣을 때 쓴다.
+ * (cx, cy)가 그림 중심, size가 그림의 한 변 길이. 호출 시점의 좌표계 단위를 그대로 따른다
+ */
+export function drawSkillGlyph(
+  ctx: CanvasRenderingContext2D,
+  skill: Skills,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string
+) {
+  const def = SkillDefs[skill];
+  if (!def.icon) return;
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+  ctx.scale(size / 24, size / 24);
+  ctx.fillStyle = color;
+  ctx.fill(iconPath(skill), def.iconRule ?? 'nonzero');
   ctx.restore();
 }
 

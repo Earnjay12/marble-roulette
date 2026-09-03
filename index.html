@@ -219,16 +219,26 @@
         .getSkillList()
         .map((s) => `<li>${s.svg}<b>${s.name}</b><span class="desc">${s.description}</span></li>`)
         .join('');
+      // 배당표: 한 줄에 구슬 하나. 색 점·이름 | 배지·스킬 이름 | 설명
       document.querySelector('#abilityList').innerHTML = window.roulette
         .getMarbleAbilities()
         .map(
           (m) =>
             `<li><span class="dot" style="background: hsl(${m.hue} 100% 60%)"></span>` +
-            `<span class="nm">${escapeHtml(m.name)}</span>${m.svg}<span class="sk">${m.skillName}</span></li>`
+            `<span class="nm">${escapeHtml(m.name)}</span>${m.svg}<span class="sk">${m.skillName}</span>` +
+            `<span class="desc">${m.description}</span></li>`
         )
         .join('');
     };
     const abilitiesModal = document.querySelector('#abilities');
+    abilitiesModal.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        abilitiesModal.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+        abilitiesModal.querySelectorAll('.tab-page').forEach((p) => {
+          p.classList.toggle('active', p.dataset.page === tab.dataset.tab);
+        });
+      });
+    });
     document.querySelector('#btnAbilities').addEventListener('click', () => {
       renderAbilities();
       abilitiesModal.classList.add('open');
@@ -403,9 +413,13 @@
 <div id="abilities" class="modal">
   <div class="modal-panel">
     <h2 data-trans>Marble abilities</h2>
+    <div class="modal-tabs">
+      <button class="tab active" data-tab="assign" data-trans>Assignments</button>
+      <button class="tab" data-tab="guide" data-trans>Skill guide</button>
+    </div>
     <div class="modal-body">
-      <ul id="abilityLegend" class="legend"></ul>
-      <ul id="abilityList" class="marble-list"></ul>
+      <ul id="abilityList" class="assign-list tab-page active" data-page="assign"></ul>
+      <ul id="abilityLegend" class="legend tab-page" data-page="guide"></ul>
     </div>
     <div class="modal-action">
       <button id="closeAbilities" data-trans>Close</button>

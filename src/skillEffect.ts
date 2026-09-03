@@ -338,12 +338,22 @@ export class SkillEffect implements GameObject {
       }
     }
 
-    // 배지가 커지며 떠오른다
+    // 배지가 커지며 떠오르고, 아래에 스킬 이름이 따라붙는다
     ctx.globalAlpha = 1 - rate;
     ctx.shadowBlur = 0;
-    ctx.translate(0, -0.5 - ease * 1.4);
+    ctx.translate(0, -0.6 - ease * 1.6);
     ctx.scale(1 / zoom, 1 / zoom);
-    drawSkillBadge(ctx, view.skill, 0, 0, 20 + 26 * ease);
+    const badgeSize = 22 + 30 * ease;
+    drawSkillBadge(ctx, view.skill, 0, 0, badgeSize);
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeText(view.name, 0, badgeSize / 2 + 3);
+    ctx.fillText(view.name, 0, badgeSize / 2 + 3);
     ctx.restore();
   }
 }

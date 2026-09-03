@@ -1,5 +1,5 @@
 import { MARBLE_RADIUS, RPG_TRIGGER_RATE, Skills, STUCK_DELAY, Themes } from './data/constants';
-import { drawSkillBadge, getSkillView } from './data/skills';
+import { drawSkillGlyph, getSkillView } from './data/skills';
 import type { IPhysics } from './IPhysics';
 import options from './options';
 import type { ColorTheme } from './types/ColorTheme';
@@ -7,6 +7,9 @@ import type { VectorLike } from './types/VectorLike';
 import { transformGuard } from './utils/transformGuard';
 import { rad } from './utils/utils';
 import { Vector } from './utils/Vector';
+
+/** 둔화 상태의 중력 배율 */
+const SLOW_GRAVITY = 0.15;
 
 export class Marble {
   type = 'marble' as const;
@@ -25,8 +28,10 @@ export class Marble {
   /** 지속 효과(깃털·거대화 등)가 켜져 있으면 그 스킬, 남은 시간 */
   private _effectSkill: Skills = Skills.None;
   private _effectRemaining = 0;
-  /** 저주에 걸려 멈춰 있는 남은 시간 */
+  /** 얼음·저주·급제동으로 멈춰 있는 남은 시간 */
   private _stunRemaining = 0;
+  /** 둔화장에 걸려 느려진 남은 시간 */
+  private _slowRemaining = 0;
 
   private _skillRate = 0.0005;
   private _coolTime = 5000;
@@ -86,7 +91,8 @@ export class Marble {
     if (this.isActive && Vector.lenSq(Vector.sub(this.lastPosition, this.position)) < 0.00001) {
       this._stuckTime += deltaTime;
 
-      if (this._stuckTime > STUCK_DELAY) {
+      // 멈춘 상태는 일부러 세운 것이니 흔들지 않는다
+      if (this._stuckTime > STUCK_DELAY && this._stunRemaining <= 0) {
         this.physics.shakeMarble(this.id);
         this._stuckTime = 0;
       }
@@ -100,7 +106,7 @@ export class Marble {
       this.impact = Math.max(0, this.impact - deltaTime);
     }
     this._updateEffect(deltaTime);
-    this._updateStun(deltaTime);
+    this._updateStatus(deltaTime);
     if (!this.isActive) return;
     if (options.useSkills && this._stunRemaining <= 0) {
       this._updateSkillInformation(deltaTime);
@@ -115,40 +121,65 @@ export class Marble {
     return this._stunRemaining > 0;
   }
 
-  /** 지속 효과를 시작한다. 실제 물리 변경은 roulette이 하고, 여기서는 만료만 관리한다 */
+  get isSlowed(): boolean {
+    return this._slowRemaining > 0;
+  }
+
+  /** 지속 효과를 시작한다. 중력 계열은 여기서 바로 적용하고, 나머지 물리 변경은 roulette이 한다 */
   startEffect(skill: Skills) {
     this._effectSkill = skill;
     this._effectRemaining = getSkillView(skill).duration ?? 0;
+    this._applyGravity();
   }
 
-  /** 저주: 일정 시간 그 자리에 멈춘다. 중력도 끈다 */
+  /** 얼음·저주·급제동: 일정 시간 그 자리에 멈춘다. 중력도 끈다 */
   stun(duration: number) {
-    this._stunRemaining = duration;
+    this._stunRemaining = Math.max(this._stunRemaining, duration);
     this.physics.freezeMarble(this.id);
-    this.physics.setGravityScale(this.id, 0);
+    this._applyGravity();
   }
 
-  private _gravityForEffect(): number {
-    switch (this._effectSkill) {
-      case Skills.Feather:
-        return 0.2;
-      case Skills.Anchor:
-        return 3;
-      case Skills.AntiGravity:
-        return -0.8;
-      default:
-        return 1;
-    }
+  /** 둔화장: 속도를 확 줄이고 한동안 아주 천천히 떨어진다 */
+  slow(duration: number) {
+    this._slowRemaining = Math.max(this._slowRemaining, duration);
+    this.physics.scaleVelocity(this.id, 0.2);
+    this._applyGravity();
   }
 
-  private _updateStun(deltaTime: number) {
-    if (this._stunRemaining <= 0) return;
-    this._stunRemaining -= deltaTime;
-    // 다른 구슬이 밀어도 제자리를 지키게 매 프레임 속도를 죽인다
-    this.physics.freezeMarble(this.id);
-    if (this._stunRemaining <= 0) {
-      this.physics.setGravityScale(this.id, this._gravityForEffect());
+  /** 상태(멈춤·둔화)와 지속 효과를 합쳐 지금 맞는 중력 배율을 물리에 적용한다 */
+  private _applyGravity() {
+    let scale = 1;
+    if (this._stunRemaining > 0) scale = 0;
+    else if (this._slowRemaining > 0) scale = SLOW_GRAVITY;
+    else {
+      switch (this._effectSkill) {
+        case Skills.Feather:
+          scale = 0.05;
+          break;
+        case Skills.Anchor:
+          scale = 5;
+          break;
+        case Skills.AntiGravity:
+          scale = -1.5;
+          break;
+      }
     }
+    this.physics.setGravityScale(this.id, scale);
+  }
+
+  private _updateStatus(deltaTime: number) {
+    let changed = false;
+    if (this._stunRemaining > 0) {
+      this._stunRemaining -= deltaTime;
+      // 다른 구슬이 밀어도 제자리를 지키게 매 프레임 속도를 죽인다
+      this.physics.freezeMarble(this.id);
+      if (this._stunRemaining <= 0) changed = true;
+    }
+    if (this._slowRemaining > 0) {
+      this._slowRemaining -= deltaTime;
+      if (this._slowRemaining <= 0) changed = true;
+    }
+    if (changed) this._applyGravity();
   }
 
   private _updateEffect(deltaTime: number) {
@@ -162,7 +193,7 @@ export class Marble {
       case Skills.Feather:
       case Skills.Anchor:
       case Skills.AntiGravity:
-        if (this._stunRemaining <= 0) this.physics.setGravityScale(this.id, 1);
+        this._applyGravity();
         break;
       case Skills.Ghost:
         this.physics.setGhost(this.id, false);
@@ -253,6 +284,9 @@ export class Marble {
     } else {
       this._drawStyledBody(ctx, hs, lightness);
     }
+    if (options.skillMode === 'rpg') {
+      this._drawAbilityGlyph(ctx, hs);
+    }
 
     ctx.globalAlpha = 1;
     ctx.shadowColor = '';
@@ -266,11 +300,10 @@ export class Marble {
     if (options.useSkills) {
       this._renderCoolTime(ctx, zoom);
     }
-    if (options.skillMode === 'rpg') {
-      this._drawAbilityBadge(ctx, zoom);
-    }
     if (this._stunRemaining > 0) {
-      this._drawStunMark(ctx, zoom);
+      this._drawStatusRing(ctx, zoom, '#74b9ff', [0.1, 0.07]);
+    } else if (this._slowRemaining > 0) {
+      this._drawStatusRing(ctx, zoom, '#81ecec', [0.04, 0.1]);
     }
   }
 
@@ -342,11 +375,6 @@ export class Marble {
         circle(hs * 0.88);
         ctx.stroke();
         ctx.shadowBlur = 0;
-        ctx.lineWidth = hs * 0.08;
-        ctx.globalAlpha *= 0.8;
-        circle(hs * 0.45);
-        ctx.stroke();
-        ctx.globalAlpha /= 0.8;
         break;
       }
       case 'sketch': {
@@ -359,7 +387,7 @@ export class Marble {
         ctx.clip();
         ctx.strokeStyle = line;
         ctx.lineWidth = hs * 0.06;
-        ctx.globalAlpha *= 0.45;
+        ctx.globalAlpha *= 0.35;
         ctx.beginPath();
         for (let i = -2; i <= 2; i++) {
           ctx.moveTo(x - hs + i * hs * 0.45, y + hs);
@@ -397,6 +425,23 @@ export class Marble {
     ctx.fill();
   }
 
+  /** 능력 모드에서 구슬 안에 크게 들어가는 스킬 그림 */
+  private _drawAbilityGlyph(ctx: CanvasRenderingContext2D, hs: number) {
+    if (this.ability === Skills.None) return;
+    const { x, y } = this.position;
+    const neon = this.theme.marbleStyle === 'neon';
+    ctx.save();
+    ctx.shadowBlur = 0;
+    // 밝은 구슬 위에는 어두운 그림, 네온(어두운 심)에는 밝은 그림. 뒤에 흐린 원을 깔아 어떤 색 위에서도 읽히게 한다
+    ctx.fillStyle = neon ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.35)';
+    ctx.beginPath();
+    ctx.arc(x, y, hs * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    const color = neon ? `hsl(${this.hue} 100% 80%)` : 'rgba(25, 25, 25, 0.88)';
+    drawSkillGlyph(ctx, this.ability, x, y, hs * 1.15, color);
+    ctx.restore();
+  }
+
   private _drawName(ctx: CanvasRenderingContext2D, zoom: number) {
     // 정렬·기준선을 여기서 직접 잡는다. 다른 그리기 코드가 바꿔 놓은 값이 새면 이름이 엉뚱한 곳에 찍힌다
     ctx.save();
@@ -431,24 +476,14 @@ export class Marble {
     ctx.stroke();
   }
 
-  /** 능력 모드에서 구슬 머리 위에 붙는 스킬 배지 */
-  private _drawAbilityBadge(ctx: CanvasRenderingContext2D, zoom: number) {
-    if (this.ability === Skills.None) return;
+  /** 멈춤·둔화 상태를 알리는 점선 고리 */
+  private _drawStatusRing(ctx: CanvasRenderingContext2D, zoom: number, color: string, dash: number[]) {
     ctx.save();
-    ctx.translate(this.x, this.y - this.size / 2);
-    ctx.scale(1 / zoom, 1 / zoom);
-    drawSkillBadge(ctx, this.ability, 0, -11, 17);
-    ctx.restore();
-  }
-
-  /** 저주에 걸려 멈춘 동안 두르는 점선 고리 */
-  private _drawStunMark(ctx: CanvasRenderingContext2D, zoom: number) {
-    ctx.save();
-    ctx.strokeStyle = '#6c5ce7';
-    ctx.lineWidth = 2 / zoom;
-    ctx.setLineDash([0.1, 0.07]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5 / zoom;
+    ctx.setLineDash(dash);
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size / 2 + 4 / zoom, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.size / 2 + 5 / zoom, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }

@@ -190,7 +190,7 @@ export class Box2dPhysics implements IPhysics {
     });
   }
 
-  attract(id: number): void {
+  attract(id: number, power = 3): void {
     const src = this.marbleMap[id];
     if (!src) return;
 
@@ -200,9 +200,9 @@ export class Box2dPhysics implements IPhysics {
       toSrc.op_sub(body.GetPosition());
       const distSq = toSrc.LengthSquared();
       if (distSq < 100 && distSq > 0.01) {
-        const power = 1 - Math.sqrt(distSq) / 10;
+        const strength = 1 - Math.sqrt(distSq) / 10;
         toSrc.Normalize();
-        toSrc.op_mul(power * 3);
+        toSrc.op_mul(power * strength);
         body.ApplyLinearImpulseToCenter(toSrc, true);
       }
     });
@@ -309,8 +309,8 @@ export class Box2dPhysics implements IPhysics {
       if (otherId === id) continue;
       const body = this.marbleMap[otherId];
       const p = body.GetPosition();
-      // "앞"은 더 아래(골에 가까운 쪽)
-      if (p.y <= sy) continue;
+      // "앞"은 더 아래(골에 가까운 쪽). 나란히 떨어지는 구슬(같은 높이)도 대상에 넣는다
+      if (p.y < sy - 0.3) continue;
       const d = Math.hypot(p.x - src.GetPosition().x, p.y - sy);
       if (d < bestDist) {
         bestDist = d;
