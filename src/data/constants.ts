@@ -25,7 +25,6 @@ export enum Skills {
   Slap = 14,
   SlowField = 15,
   Hex = 19,
-  Titan = 20,
   Gun = 21,
 }
 

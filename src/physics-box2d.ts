@@ -19,8 +19,6 @@ export class Box2dPhysics implements IPhysics {
   private world!: Box2D.b2World;
 
   private marbleMap: { [id: number]: Box2D.b2Body } = {};
-  /** 구슬마다 밀도가 달라서(1~2) 거인 스킬이 끝나면 원래 값으로 돌려놓아야 한다 */
-  private baseDensity: { [id: number]: number } = {};
   private entities: ({ body: Box2D.b2Body } & MapEntityState)[] = [];
 
   private deleteCandidates: Box2D.b2Body[] = [];
@@ -73,7 +71,6 @@ export class Box2dPhysics implements IPhysics {
       this.world.DestroyBody(body);
     });
     this.marbleMap = {};
-    this.baseDensity = {};
     this.ghostIds.clear();
     this.passObstacleIds.clear();
   }
@@ -160,8 +157,7 @@ export class Box2dPhysics implements IPhysics {
 
     const body = this.world.CreateBody(bodyDef);
     this.Box2D.destroy(bodyDef);
-    this.baseDensity[id] = 1 + Math.random();
-    this.attachMarbleFixture(body, MARBLE_RADIUS, this.baseDensity[id], 0, COLLIDE_ALL);
+    this.attachMarbleFixture(body, MARBLE_RADIUS, 1 + Math.random(), 0, COLLIDE_ALL);
     body.SetAwake(false);
     body.SetEnabled(false);
     this.marbleMap[id] = body;
@@ -195,7 +191,6 @@ export class Box2dPhysics implements IPhysics {
     if (marble) {
       this.world.DestroyBody(marble);
       delete this.marbleMap[id];
-      delete this.baseDensity[id];
       this.ghostIds.delete(id);
       this.passObstacleIds.delete(id);
     }
@@ -442,13 +437,6 @@ export class Box2dPhysics implements IPhysics {
     const body = this.marbleMap[id];
     if (!body) return;
     body.GetFixtureList().SetRestitution(restitution);
-  }
-
-  setMassScale(id: number, scale: number): void {
-    const body = this.marbleMap[id];
-    if (!body) return;
-    body.GetFixtureList().SetDensity(this.baseDensity[id] * scale);
-    body.ResetMassData();
   }
 
   private nearestAhead(id: number, maxDistance: number): { id: number; body: Box2D.b2Body } | null {

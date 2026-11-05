@@ -16,7 +16,6 @@ export type EffectKind =
   | 'slap'
   | 'slow'
   | 'hex'
-  | 'shield'
   | 'gun';
 
 export interface SkillDef {
@@ -160,16 +159,6 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     icon: 'M12 2a8 8 0 00-8 8c0 3 1.6 5.5 4 7v3h8v-3c2.4-1.5 4-4 4-7a8 8 0 00-8-8zm-3.5 7a2 2 0 110 4 2 2 0 010-4zm7 0a2 2 0 110 4 2 2 0 010-4zM11 15h2l-1 2z',
     iconRule: 'evenodd',
   },
-  [Skills.Titan]: {
-    name: '거인',
-    description: '잠시 아주 무거워져 남이 밀어내지 못한다',
-    color: '#b2bec3',
-    duration: 3000,
-    effectRadius: 3,
-    effect: 'shield',
-    icon: 'M12 1l9 4v6c0 5.5-3.8 10.5-9 12-5.2-1.5-9-6.5-9-12V5zm0 3.2L5 7v4c0 4.2 2.8 8.1 7 9.4 4.2-1.3 7-5.2 7-9.4V7z',
-    iconRule: 'evenodd',
-  },
 };
 
 export const ALL_SKILLS: Skills[] = [
@@ -187,13 +176,12 @@ export const ALL_SKILLS: Skills[] = [
   Skills.Slap,
   Skills.SlowField,
   Skills.Hex,
-  Skills.Titan,
 ];
 
 type SkillOverride = { skill: Skills; name?: string; description?: string; color?: string };
 
 /**
- * 테마별 스킬 세트. 기본 테마는 전부, 핀볼은 어울리는 10종을 골라 핀볼 용어로 이름을 바꾼다.
+ * 테마별 스킬 세트. 기본 테마는 전부, 핀볼은 어울리는 9종을 골라 핀볼 용어로 이름을 바꾼다.
  * 물리 효과는 같다
  */
 export const ThemeSkillSets: Record<string, SkillOverride[]> = {
@@ -204,7 +192,6 @@ export const ThemeSkillSets: Record<string, SkillOverride[]> = {
     { skill: Skills.Dash, name: '플런저 러시', description: '플런저로 쏜 듯 장애물을 피해 다섯 번 꺾어 달린다' },
     { skill: Skills.Gun, name: '볼 슈터', description: '가까운 구슬들에게 쇠구슬을 연사한다' },
     { skill: Skills.Slap, name: '틸트', description: '기계를 흔들어 앞 구슬을 쳐올린다' },
-    { skill: Skills.Titan, name: '강철구슬', description: '잠시 무거운 강철구슬이 되어 밀리지 않는다' },
     { skill: Skills.Bouncy, name: '고무구슬', description: '잠시 고무공처럼 세게 튕긴다' },
     { skill: Skills.Magnet, name: '마그넷 세이브', description: '자석으로 주변 구슬을 끌어당긴다' },
     { skill: Skills.Freeze, name: '볼 락', description: '주변 구슬을 그 자리에 잠근다' },

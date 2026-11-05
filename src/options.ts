@@ -10,9 +10,6 @@ class Options {
   winnerRange: WinnerRange = { start: 0, end: 0 };
   autoRecording: boolean = true;
 
-  /** 모노전투에서 모든 구슬이 쓸 스킬 번호. 'random'이면 섞을 때마다 하나를 뽑는다 */
-  monoSkill: number | 'random' = 'random';
-
   /** 구슬마다 고유 능력이 있는 모드(능력·모노전투) */
   get abilityMode(): boolean {
     return this.skillMode === 'rpg' || this.skillMode === 'mono';

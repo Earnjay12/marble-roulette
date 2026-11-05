@@ -254,10 +254,6 @@ export class Roulette extends EventTarget {
         }
         break;
       }
-      case Skills.Titan:
-        physics.setMassScale(marble.id, 30);
-        marble.startEffect(skill);
-        break;
     }
   }
 
@@ -385,16 +381,13 @@ export class Roulette extends EventTarget {
 
   /**
    * 능력을 나눠 준다. 능력 모드는 현재 테마 세트를 골고루 돌리되 순서는 매번 섞고,
-   * 모노전투는 모든 구슬에 같은 스킬(랜덤이면 하나를 뽑아서)을 준다
+   * 모노전투는 스킬 하나를 뽑아 모든 구슬에 똑같이 준다
    */
   private _assignAbilities() {
     const poolSkills = getSkillPool().map((v) => v.skill);
     if (poolSkills.length === 0) return;
     if (options.skillMode === 'mono') {
-      const chosen =
-        options.monoSkill !== 'random' && poolSkills.includes(options.monoSkill as Skills)
-          ? (options.monoSkill as Skills)
-          : poolSkills[Math.floor(Math.random() * poolSkills.length)];
+      const chosen = poolSkills[Math.floor(Math.random() * poolSkills.length)];
       this._marbles.forEach((marble) => {
         marble.ability = chosen;
       });
@@ -411,12 +404,6 @@ export class Roulette extends EventTarget {
 
   /** 스킬 모드가 바뀌었을 때 능력을 다시 나눈다 */
   public refreshAbilities() {
-    this._assignAbilities();
-  }
-
-  /** 모노전투 스킬 지정. 'random' 또는 스킬 번호 문자열 */
-  public setMonoSkill(value: string) {
-    options.monoSkill = value === 'random' ? 'random' : Number(value);
     this._assignAbilities();
   }
 

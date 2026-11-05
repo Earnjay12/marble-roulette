@@ -123,9 +123,6 @@ export class SkillEffect implements GameObject {
       case 'hex':
         radial(12, 3, 0.12);
         break;
-      case 'shield':
-        radial(12, 2.5, 0.1);
-        break;
     }
     return out;
   }
@@ -224,9 +221,6 @@ export class SkillEffect implements GameObject {
       case 'slow':
         ring(R * ease, 2.5, [0.4, 0.3]);
         polygon(R * ease * 0.7, 8, 1.5, 0.15);
-        break;
-      case 'shield':
-        polygon(R * (0.5 + 0.5 * ease), 6, 4, 0.25);
         break;
       case 'hex':
         ring(R * ease, 3, [0.25, 0.25]);

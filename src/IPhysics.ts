@@ -60,9 +60,6 @@ export interface IPhysics {
   /** 구슬 탄성 변경 (탱탱볼). 0이 기본 */
   setRestitution(id: number, restitution: number): void;
 
-  /** 질량 배율 (거인). 1이 기본 */
-  setMassScale(id: number, scale: number): void;
-
   /** 반지름 radius인 구슬이 선분을 따라 막힘 없이 갈 수 있는 비율(0~1) */
   clearFraction(x1: number, y1: number, x2: number, y2: number, radius: number): number;
 

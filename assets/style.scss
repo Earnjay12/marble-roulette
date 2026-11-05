@@ -666,17 +666,3 @@ div.toast {
     }
   }
 }
-
-// 모노전투 스킬 선택 행. 모노전투일 때만 보인다
-#settings div.right div.row.row-mono {
-  display: none;
-
-  &.active {
-    display: flex;
-  }
-
-  select {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}

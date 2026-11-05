@@ -240,9 +240,6 @@ export class Marble {
       case Skills.Bouncy:
         this.physics.setRestitution(this.id, 0);
         break;
-      case Skills.Titan:
-        this.physics.setMassScale(this.id, 1);
-        break;
     }
   }
 
