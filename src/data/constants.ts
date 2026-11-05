@@ -26,7 +26,18 @@ export enum Skills {
   SlowField = 15,
   Hex = 19,
   Gun = 21,
+  // 애니 팩
+  Teleport = 22,
+  Beam = 23,
+  TimeStop = 24,
+  ForceGrip = 25,
+  WebSwing = 26,
+  Thunder = 27,
+  Smash = 28,
 }
+
+/** 스킬 팩. general=일반 스킬, anime=애니·영화 캐릭터에서 따온 스킬 */
+export type SkillPack = 'general' | 'anime';
 
 /** 스킬 옵션. none=스킬 없음, basic=원본과 같은 폭발만, rpg=구슬마다 고유 능력 하나, mono=모든 구슬이 같은 능력 */
 export type SkillMode = 'none' | 'basic' | 'rpg' | 'mono';

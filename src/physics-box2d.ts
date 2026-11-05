@@ -340,9 +340,12 @@ export class Box2dPhysics implements IPhysics {
     );
   }
 
-  /** 코스 안쪽인지. 좌우로 벽이 하나씩은 있어야 안쪽이다 */
+  /**
+   * 코스 안쪽인지. 좌우로 벽이든 장애물이든 무언가 있어야 안쪽이다.
+   * 벽을 꺾은선 대신 상자로 만든 맵(밤을 달리다)이 있어 장애물도 함께 본다
+   */
   isInsideCourse(x: number, y: number): boolean {
-    return this.rayFraction(x, y, x - 30, y, true) < 1 && this.rayFraction(x, y, x + 30, y, true) < 1;
+    return this.rayFraction(x, y, x - 30, y) < 1 && this.rayFraction(x, y, x + 30, y) < 1;
   }
 
   /** 반지름 r인 원이 벽이나 장애물과 겹쳐 있는지 */

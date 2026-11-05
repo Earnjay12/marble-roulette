@@ -28,6 +28,8 @@ export class Marble {
   /** 능력·모노전투 모드에서 이 구슬이 가진 스킬 */
   ability: Skills = Skills.None;
   isActive: boolean = false;
+  /** 결승선 바로 앞이면 true. 이 구간에서는 멈춤·둔화에 걸리지 않는다(출구 앞에서 서로 멈춰 한참 막히는 것 방지) */
+  nearGoal = false;
 
   /** 지속 효과(깃털·거대화 등)가 켜져 있으면 그 스킬, 남은 시간 */
   private _effectSkill: Skills = Skills.None;
@@ -140,7 +142,7 @@ export class Marble {
 
   /** 지금 멈춤을 걸 수 있는지(멈춰 있지도, 면역 중도 아님) */
   get canBeStunned(): boolean {
-    return this._stunRemaining <= 0 && this._stunImmune <= 0;
+    return this._stunRemaining <= 0 && this._stunImmune <= 0 && !this.nearGoal;
   }
 
   /** 지속 효과를 시작한다. 중력 계열은 여기서 바로 적용하고, 나머지 물리 변경은 roulette이 한다 */
@@ -165,7 +167,7 @@ export class Marble {
 
   /** 둔화탄: 속도를 확 줄이고 한동안 아주 천천히 떨어진다 */
   slow(duration: number) {
-    if (this._slowRemaining > 0 || this._slowImmune > 0) return;
+    if (this._slowRemaining > 0 || this._slowImmune > 0 || this.nearGoal) return;
     this._slowRemaining = duration;
     this.physics.scaleVelocity(this.id, 0.2);
     this._applyGravity();
@@ -191,7 +193,7 @@ export class Marble {
       this.physics.freezeMarble(this.id);
       if (this._stunRemaining <= 0) {
         changed = true;
-        this._stunImmune = 2000;
+        this._stunImmune = 3500;
       }
     }
     if (this._slowRemaining > 0) {

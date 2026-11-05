@@ -16,6 +16,13 @@ export type EffectKind =
   | 'slap'
   | 'slow'
   | 'hex'
+  | 'teleport'
+  | 'beam'
+  | 'timestop'
+  | 'grip'
+  | 'web'
+  | 'thunder'
+  | 'smash'
   | 'gun';
 
 export interface SkillDef {
@@ -159,11 +166,69 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     icon: 'M12 2a8 8 0 00-8 8c0 3 1.6 5.5 4 7v3h8v-3c2.4-1.5 4-4 4-7a8 8 0 00-8-8zm-3.5 7a2 2 0 110 4 2 2 0 010-4zm7 0a2 2 0 110 4 2 2 0 010-4zM11 15h2l-1 2z',
     iconRule: 'evenodd',
   },
+  [Skills.Teleport]: {
+    name: '순간이동',
+    description: '1등 바로 옆으로 순식간에 이동한다',
+    color: '#ffb142',
+    effectRadius: 1.5,
+    effect: 'teleport',
+    icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 3a7 7 0 110 14 7 7 0 010-14zm0 3a4 4 0 100 8 4 4 0 000-8z',
+    iconRule: 'evenodd',
+  },
+  [Skills.Beam]: {
+    name: '에네르기파',
+    description: '기를 모아 광선을 쏴서 맞은 구슬들을 날려 버린다',
+    color: '#4fc3f7',
+    effectRadius: 2,
+    effect: 'beam',
+    icon: 'M2 10h11v4H2zM17 6a6 6 0 110 12 6 6 0 010-12z',
+  },
+  [Skills.TimeStop]: {
+    name: '시간 정지',
+    description: '다른 모든 구슬의 시간을 잠시 멈추고 혼자 움직인다',
+    color: '#f6e58d',
+    effectRadius: 3,
+    effect: 'timestop',
+    icon: 'M12 1a11 11 0 110 22 11 11 0 010-22zm0 2.5a8.5 8.5 0 100 17 8.5 8.5 0 000-17zM11 6h2v5.4l3.8 2.2-1 1.7-4.8-2.8z',
+    iconRule: 'evenodd',
+  },
+  [Skills.ForceGrip]: {
+    name: '포스 그립',
+    description: '앞서가는 구슬 하나를 허공으로 들어 올려 붙잡는다',
+    color: '#c56cf0',
+    effectRadius: 2,
+    effect: 'grip',
+    icon: 'M8 22h7a4 4 0 004-4v-7a1.5 1.5 0 00-3 0v3h-1V6.5a1.5 1.5 0 00-3 0V14h-1V4.5a1.5 1.5 0 00-3 0V14H7V8a1.5 1.5 0 00-3 0v9l-1.5-1.5a1.5 1.5 0 00-2.1 2.1z',
+  },
+  [Skills.WebSwing]: {
+    name: '거미줄 스윙',
+    description: '앞쪽 벽에 거미줄을 쏴서 끌려가듯 날아간다',
+    color: '#ff3838',
+    effectRadius: 2,
+    effect: 'web',
+    icon: 'M11 1h2v22h-2zM1 11h22v2H1zM4.2 5.6l1.4-1.4 14.2 14.2-1.4 1.4zM18.4 4.2l1.4 1.4L5.6 19.8l-1.4-1.4zM12 6a6 6 0 110 12 6 6 0 010-12zm0 1.6a4.4 4.4 0 100 8.8 4.4 4.4 0 000-8.8z',
+    iconRule: 'evenodd',
+  },
+  [Skills.Thunder]: {
+    name: '천둥 망치',
+    description: '1등에게 벼락을 내리쳐 멈추고 주변 구슬을 날린다',
+    color: '#7ed6ff',
+    effectRadius: 2.5,
+    effect: 'thunder',
+    icon: 'M3 2h14v7H3zM8 9h4v13H8zM18 3l3 0-2 4h2l-4 6 1-4h-2z',
+  },
+  [Skills.Smash]: {
+    name: '헐크 스매시',
+    description: '아래로 내리꽂혀서 착지 충격파로 주변을 날린다',
+    color: '#2ecc71',
+    effectRadius: 3.5,
+    effect: 'smash',
+    icon: 'M5 9a2 2 0 014 0V8a2 2 0 014 0v1a2 2 0 014 0v1a2 2 0 014 0v4c0 4.4-3.6 8-8 8h-2c-3.9 0-7-3.1-7-7v-3a2 2 0 011-1.7z',
+  },
 };
 
 export const ALL_SKILLS: Skills[] = [
   Skills.Impact,
-  Skills.Dash,
   Skills.Gun,
   Skills.Feather,
   Skills.Anchor,
@@ -181,7 +246,7 @@ export const ALL_SKILLS: Skills[] = [
 type SkillOverride = { skill: Skills; name?: string; description?: string; color?: string };
 
 /**
- * 테마별 스킬 세트. 기본 테마는 전부, 핀볼은 어울리는 9종을 골라 핀볼 용어로 이름을 바꾼다.
+ * 테마별 스킬 세트. 기본 테마는 전부, 핀볼은 어울리는 8종을 골라 핀볼 용어로 이름을 바꾼다.
  * 물리 효과는 같다
  */
 export const ThemeSkillSets: Record<string, SkillOverride[]> = {
@@ -189,7 +254,6 @@ export const ThemeSkillSets: Record<string, SkillOverride[]> = {
   light: ALL_SKILLS.map((skill) => ({ skill })),
   pinball: [
     { skill: Skills.Impact, name: '범퍼 폭발', description: '범퍼처럼 주변 구슬을 튕겨낸다', color: '#ff7043' },
-    { skill: Skills.Dash, name: '플런저 러시', description: '플런저로 쏜 듯 장애물을 피해 다섯 번 꺾어 달린다' },
     { skill: Skills.Gun, name: '볼 슈터', description: '가까운 구슬들에게 쇠구슬을 연사한다' },
     { skill: Skills.Slap, name: '틸트', description: '기계를 흔들어 앞 구슬을 쳐올린다' },
     { skill: Skills.Bouncy, name: '고무구슬', description: '잠시 고무공처럼 세게 튕긴다' },
@@ -198,13 +262,26 @@ export const ThemeSkillSets: Record<string, SkillOverride[]> = {
     { skill: Skills.Swap, name: '볼 체인지', description: '앞 구슬과 자리를 바꾼다' },
     { skill: Skills.Grow, name: '점보볼', description: '커져서 범퍼와 플리퍼를 무시하고 내려간다' },
   ],
+  // 애니 팩: 애니메이션·영화 캐릭터의 기술에서 따왔다. 테마와 상관없이 이 목록을 쓴다
+  anime: [
+    { skill: Skills.Dash, name: '벽력일섬', description: '번개처럼 다섯 번 꺾어 베듯 장애물 사이를 내달린다' },
+    { skill: Skills.Teleport },
+    { skill: Skills.Beam },
+    { skill: Skills.TimeStop },
+    { skill: Skills.ForceGrip },
+    { skill: Skills.WebSwing },
+    { skill: Skills.Thunder },
+    { skill: Skills.Smash },
+  ],
 };
 
 export interface SkillView extends SkillDef {
   skill: Skills;
 }
 
+/** 애니 팩이면 테마와 상관없이 애니 목록, 아니면 테마의 목록 */
 function themeSet(themeName: string): SkillOverride[] {
+  if (options.skillPack === 'anime') return ThemeSkillSets.anime;
   return ThemeSkillSets[themeName] ?? ThemeSkillSets.dark;
 }
 

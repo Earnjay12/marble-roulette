@@ -123,6 +123,18 @@ export class SkillEffect implements GameObject {
       case 'hex':
         radial(12, 3, 0.12);
         break;
+      case 'teleport':
+        radial(12, -2.5, 0.1, 1.4);
+        break;
+      case 'beam':
+        radial(10, 4, 0.09);
+        break;
+      case 'thunder':
+        radial(16, 7, 0.12);
+        break;
+      case 'smash':
+        radial(20, 9, 0.16);
+        break;
     }
     return out;
   }
@@ -130,7 +142,9 @@ export class SkillEffect implements GameObject {
   update(deltaTime: number) {
     this._elapsed += deltaTime;
     const s = deltaTime / 1000;
-    const gravity = ['burst', 'drop', 'bounce', 'slap', 'dash', 'gun'].includes(this._view.effect) ? 8 : 0;
+    const gravity = ['burst', 'drop', 'bounce', 'slap', 'dash', 'gun', 'thunder', 'smash'].includes(this._view.effect)
+      ? 8
+      : 0;
     for (const p of this._particles) {
       p.x += p.vx * s;
       p.y += p.vy * s;
@@ -222,6 +236,18 @@ export class SkillEffect implements GameObject {
         ring(R * ease, 2.5, [0.4, 0.3]);
         polygon(R * ease * 0.7, 8, 1.5, 0.15);
         break;
+      case 'teleport':
+        ring((1 - ease) * 1.6 + 0.2, 3);
+        ring(ease * 1.2, 1.5, [0.15, 0.15]);
+        break;
+      case 'thunder':
+        ring(R * ease, 4);
+        spikes(8, R * ease * 1.2, 2);
+        break;
+      case 'smash':
+        ring(R * ease, 6);
+        ring(R * ease * 0.6, 3);
+        break;
       case 'hex':
         ring(R * ease, 3, [0.25, 0.25]);
         polygon(R * ease * 0.6, 5, 2);
@@ -312,7 +338,7 @@ export class LightningTrail implements GameObject {
   private _points: [number, number][];
   private _color: string;
 
-  constructor(from: VectorLike, to: VectorLike, color: string) {
+  constructor(from: VectorLike, to: VectorLike, color: string, segments = 7, jitter = 0.28) {
     this.position = { x: from.x, y: from.y };
     this._color = color;
     const dx = to.x - from.x;
@@ -320,11 +346,10 @@ export class LightningTrail implements GameObject {
     const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len;
     const ny = dx / len;
-    const segments = 7;
     this._points = [[from.x, from.y]];
     for (let i = 1; i < segments; i++) {
       const t = i / segments;
-      const off = rand(-0.28, 0.28);
+      const off = rand(-jitter, jitter);
       this._points.push([from.x + dx * t + nx * off, from.y + dy * t + ny * off]);
     }
     this._points.push([to.x, to.y]);
@@ -424,6 +449,205 @@ export class Projectile implements GameObject {
     ctx.beginPath();
     ctx.arc(this.position.x, this.position.y, size, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 에네르기파 광선. 굵은 빛줄기와 흰 심이 가늘어지며 사라진다 */
+export class BeamEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _from: VectorLike,
+    private _to: VectorLike,
+    private _color: string,
+    private _duration = 450
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const rate = Math.min(1, this._elapsed / this._duration);
+    const width = 0.55 * (1 - rate * 0.7);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.shadowColor = this._color;
+    ctx.shadowBlur = 25;
+    ctx.globalAlpha = 1 - rate * rate;
+    const line = (w: number, color: string) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(this._from.x, this._from.y);
+      ctx.lineTo(this._to.x, this._to.y);
+      ctx.stroke();
+    };
+    line(width * 2.2, this._color);
+    line(Math.max(width * 0.8, 2 / zoom), '#ffffff');
+    // 끝에 터지는 빛
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(this._to.x, this._to.y, width * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 광선을 쏘기 전 기를 모으는 구체. 빛 알갱이가 안으로 빨려 들어온다 */
+export class ChargeEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _at: () => VectorLike | null,
+    private _color: string,
+    private _duration: number
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration || !this._at()) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D) {
+    const at = this._at();
+    if (!at) return;
+    const rate = Math.min(1, this._elapsed / this._duration);
+    ctx.save();
+    ctx.shadowColor = this._color;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = this._color;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, 0.15 + rate * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rate * 4;
+      const d = 1.6 * (1 - rate) + 0.3;
+      ctx.beginPath();
+      ctx.arc(at.x + Math.cos(a) * d, at.y + Math.sin(a) * d, 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/** 두 지점을 잇는 줄(거미줄·염력). 양 끝을 함수로 받아 움직이는 대상을 따라간다 */
+export class TetherEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _from: () => VectorLike | null,
+    private _to: () => VectorLike | null,
+    private _color: string,
+    private _duration: number,
+    private _style: 'web' | 'force'
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration || !this._from() || !this._to()) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const a = this._from();
+    const b = this._to();
+    if (!a || !b) return;
+    const rate = Math.min(1, this._elapsed / this._duration);
+    ctx.save();
+    ctx.globalAlpha = rate > 0.8 ? (1 - rate) * 5 : 1;
+    ctx.strokeStyle = this._color;
+    ctx.shadowColor = this._color;
+    ctx.lineCap = 'round';
+    if (this._style === 'web') {
+      ctx.shadowBlur = 4;
+      ctx.lineWidth = 2.5 / zoom;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      // 벽에 붙은 거미줄 뭉치
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 염력: 일렁이는 물결선
+      ctx.shadowBlur = 16;
+      ctx.lineWidth = 3 / zoom;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i++) {
+        const t = i / 24;
+        const wave = Math.sin(t * Math.PI * 6 + this._elapsed / 60) * 0.15 * Math.sin(t * Math.PI);
+        const x = a.x + dx * t + nx * wave;
+        const y = a.y + dy * t + ny * wave;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha *= 0.35;
+      ctx.fillStyle = this._color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/** 시간 정지: 시전자에게서 퍼지는 큰 고리와 화면 전체의 잿빛 막 */
+export class TimeStopEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _center: VectorLike,
+    private _duration: number
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const rate = Math.min(1, this._elapsed / this._duration);
+    const grow = Math.min(1, this._elapsed / 350);
+    const fade = rate > 0.85 ? (1 - rate) / 0.15 : 1;
+    const { x, y } = this._center;
+    ctx.save();
+    ctx.globalAlpha = 0.22 * fade;
+    ctx.fillStyle = '#4b4b6b';
+    ctx.fillRect(x - 60, y - 60, 120, 120);
+    ctx.globalAlpha = (1 - grow) * 0.9 + 0.1 * fade;
+    ctx.strokeStyle = '#f6e58d';
+    ctx.shadowColor = '#f6e58d';
+    ctx.shadowBlur = 20;
+    ctx.lineWidth = 6 / zoom;
+    ctx.beginPath();
+    ctx.arc(x, y, grow * 22, 0, Math.PI * 2);
+    ctx.stroke();
+    // 째깍거리다 멈춘 시계 바늘
+    ctx.globalAlpha = 0.8 * fade;
+    ctx.lineWidth = 3 / zoom;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - 0.85);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 0.6, y + 0.2);
+    ctx.stroke();
     ctx.restore();
   }
 }

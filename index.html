@@ -206,12 +206,26 @@
       });
       const abilityMode = mode === 'rpg' || mode === 'mono';
       document.querySelector('#btnAbilities').classList.toggle('visible', abilityMode);
+      document.querySelector('.row-pack').classList.toggle('active', abilityMode);
       window.roulette.refreshAbilities();
     };
     document.querySelectorAll('.btn-skill').forEach((btn) => {
       btn.addEventListener('click', () => applySkillMode(btn.dataset.skill));
     });
 
+    // 스킬 팩: 일반 / 애니(캐릭터 기술). 능력·모노전투에서만 보인다
+    const applyPack = (pack) => {
+      window.options.skillPack = pack;
+      localStorage.setItem('mbr_pack', pack);
+      document.querySelectorAll('.btn-pack').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.pack === pack);
+      });
+      window.roulette.refreshAbilities();
+    };
+    document.querySelectorAll('.btn-pack').forEach((btn) => {
+      btn.addEventListener('click', () => applyPack(btn.dataset.pack));
+    });
+    applyPack(localStorage.getItem('mbr_pack') === 'anime' ? 'anime' : 'general');
     applySkillMode(localStorage.getItem('mbr_skill') || 'basic');
 
     // 능력표 창: 스킬 설명과 구슬별 배정 결과
@@ -358,6 +372,16 @@
           <button class="btn-skill active" data-skill="basic" data-trans>Basic</button>
           <button class="btn-skill" data-skill="rpg" data-trans>Abilities</button>
           <button class="btn-skill" data-skill="mono" data-trans>Mono battle</button>
+        </div>
+      </div>
+      <div class="row row-pack">
+        <label>
+          <i class="icon play"></i>
+          <span data-trans>Skill pack</span>
+        </label>
+        <div class="btn-group">
+          <button class="btn-pack active" data-pack="general" data-trans>General</button>
+          <button class="btn-pack" data-pack="anime" data-trans>Anime</button>
         </div>
       </div>
       <div class="row">

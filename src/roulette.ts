@@ -12,7 +12,15 @@ import { ParticleManager } from './particleManager';
 import { Box2dPhysics } from './physics-box2d';
 import { RankRenderer } from './rankRenderer';
 import { RouletteRenderer } from './rouletteRenderer';
-import { LightningTrail, Projectile, SkillEffect } from './skillEffect';
+import {
+  BeamEffect,
+  ChargeEffect,
+  LightningTrail,
+  Projectile,
+  SkillEffect,
+  TetherEffect,
+  TimeStopEffect,
+} from './skillEffect';
 import type { ColorTheme } from './types/ColorTheme';
 import type { MouseEventHandlerName, MouseEventName } from './types/mouseEvents.type';
 import type { UIObject } from './UIObject';
@@ -153,6 +161,7 @@ export class Roulette extends EventTarget {
 
     for (let i = 0; i < this._marbles.length; i++) {
       const marble = this._marbles[i];
+      marble.nearGoal = marble.y > this._stage.goalY - 8;
       marble.update(deltaTime);
       if (marble.skill !== Skills.None) {
         this._applySkill(marble);
@@ -241,6 +250,27 @@ export class Roulette extends EventTarget {
       }
       case Skills.SlowField:
         this._throwSlowField(marble);
+        break;
+      case Skills.Teleport:
+        this._teleportToLeader(marble);
+        break;
+      case Skills.Beam:
+        this._chargeBeam(marble);
+        break;
+      case Skills.TimeStop:
+        this._timeStop(marble);
+        break;
+      case Skills.ForceGrip:
+        this._forceGrip(marble);
+        break;
+      case Skills.WebSwing:
+        this._webSwing(marble);
+        break;
+      case Skills.Thunder:
+        this._thunderStrike(marble);
+        break;
+      case Skills.Smash:
+        this._smash(marble);
         break;
       case Skills.Hex: {
         // 나보다 앞서 있는(아래쪽) 구슬 중 하나를 골라 멈춘다. 없으면 아무나
@@ -372,6 +402,203 @@ export class Roulette extends EventTarget {
         }
       )
     );
+  }
+
+  /** 나를 뺀 1등(가장 아래에 있는 구슬) */
+  private _leader(except: Marble): Marble | null {
+    return this._marbles.reduce<Marble | null>((best, m) => {
+      if (m === except) return best;
+      return !best || m.y > best.y ? m : best;
+    }, null);
+  }
+
+  /** 반지름 r인 구슬이 (x, y)에 들어갈 수 있는지(코스 안, 벽·장애물·다른 구슬과 안 겹침) */
+  private _isFreeSpot(x: number, y: number, except: Marble) {
+    return (
+      this.physics.isInsideCourse(x, y) &&
+      !this.physics.overlapsEntity(x, y, MARBLE_RADIUS) &&
+      !this._marbles.some((m) => m !== except && Math.hypot(m.x - x, m.y - y) < MARBLE_RADIUS * 2)
+    );
+  }
+
+  /** 밀어내기: center에서 바깥으로, 가까울수록 세게 */
+  private _blastFrom(center: { x: number; y: number }, radius: number, power: number, except: Marble[]) {
+    this._marblesAround(center, radius)
+      .filter((m) => !except.includes(m))
+      .forEach((m) => {
+        const dx = m.x - center.x;
+        const dy = m.y - center.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const k = power * (1 - (d / radius) * 0.5);
+        this.physics.applyImpulse(m.id, (dx / d) * k, (dy / d) * k - 3);
+      });
+  }
+
+  /** 순간이동(드래곤볼): 1등 바로 옆이나 뒤 빈자리로 옮긴다. 내가 이미 1등이면 쓰지 않는다 */
+  private _teleportToLeader(marble: Marble) {
+    const leader = this._leader(marble);
+    if (!leader || leader.y <= marble.y) return;
+    const L = leader.position;
+    const spots = shuffle([
+      [-0.65, 0],
+      [0.65, 0],
+      [0, -0.65],
+      [-0.5, -0.5],
+      [0.5, -0.5],
+    ]);
+    for (const [dx, dy] of spots) {
+      const x = L.x + dx;
+      const y = L.y + dy;
+      if (!this._isFreeSpot(x, y, marble)) continue;
+      this.physics.teleport(marble.id, x, y);
+      const v = this.physics.getVelocity(leader.id);
+      this.physics.setVelocity(marble.id, v.x, v.y);
+      this._effects.push(new SkillEffect(x, y, Skills.Teleport, false));
+      return;
+    }
+  }
+
+  /**
+   * 에네르기파(드래곤볼): 0.4초 기를 모은 뒤, 아래쪽 반원에서 구슬을 가장 많이 맞히는 방향으로
+   * 광선을 쏜다. 광선은 벽에서 멈추고, 맞은 구슬은 광선 방향으로 날아간다
+   */
+  private _chargeBeam(marble: Marble) {
+    const color = getSkillView(Skills.Beam).color;
+    this._effects.push(new ChargeEffect(() => (this._alive(marble) ? marble.position : null), color, 400));
+    this._schedule(400, () => {
+      if (!this._alive(marble)) return;
+      const from = marble.position;
+      const RANGE = 12;
+      let best: { dx: number; dy: number; len: number; hits: Marble[] } | null = null;
+      for (let deg = -80; deg <= 80; deg += 10) {
+        const a = (deg * Math.PI) / 180;
+        const dx = Math.sin(a);
+        const dy = Math.cos(a);
+        const len = this.physics.rayFraction(from.x, from.y, from.x + dx * RANGE, from.y + dy * RANGE, true) * RANGE;
+        const hits = this._marbles.filter((m) => {
+          if (m === marble) return false;
+          const t = (m.x - from.x) * dx + (m.y - from.y) * dy;
+          if (t < 0 || t > len) return false;
+          return Math.abs((m.x - from.x) * dy - (m.y - from.y) * dx) < 0.6;
+        });
+        if (!best || hits.length > best.hits.length || (hits.length === best.hits.length && Math.random() < 0.3)) {
+          best = { dx, dy, len, hits };
+        }
+      }
+      if (!best) return;
+      const { dx, dy, len, hits } = best;
+      hits.forEach((m) => this.physics.applyImpulse(m.id, dx * 14, dy * 14 - 2));
+      this.physics.applyImpulse(marble.id, -dx * 3, -dy * 3);
+      this._effects.push(new BeamEffect(from, { x: from.x + dx * len, y: from.y + dy * len }, color));
+    });
+  }
+
+  /** 시간 정지(죠죠): 다른 모든 구슬을 1.5초 멈춘다. 방금 풀려나 면역인 구슬은 빼고 */
+  private _timeStop(marble: Marble) {
+    this._marbles.forEach((m) => {
+      if (m !== marble) m.stun(1500);
+    });
+    this._effects.push(new TimeStopEffect(marble.position, 1500));
+  }
+
+  /** 포스 그립(스타워즈): 앞서가는 가장 가까운 구슬을 위로 들어 올린 뒤 잠시 붙잡아 둔다 */
+  private _forceGrip(marble: Marble) {
+    const candidates = this._marblesAround(marble.position, 10, marble).filter((m) => m.y > marble.y);
+    if (candidates.length === 0) return;
+    const target = candidates.reduce((a, b) =>
+      Math.hypot(a.x - marble.x, a.y - marble.y) < Math.hypot(b.x - marble.x, b.y - marble.y) ? a : b
+    );
+    const color = getSkillView(Skills.ForceGrip).color;
+    this._effects.push(
+      new TetherEffect(
+        () => (this._alive(marble) ? marble.position : null),
+        () => (this._alive(target) ? target.position : null),
+        color,
+        1400,
+        'force'
+      )
+    );
+    // 위로 막히지 않는 만큼만 들어 올린다
+    const P0 = target.position;
+    const lift = Math.max(0, this.physics.clearFraction(P0.x, P0.y, P0.x, P0.y - 3, MARBLE_RADIUS) * 3 - 0.4);
+    for (let i = 0; i < 5; i++) {
+      this._schedule(i * 50, () => {
+        if (this._alive(target)) this.physics.setVelocity(target.id, 0, -lift * 4);
+      });
+    }
+    this._schedule(260, () => {
+      if (this._alive(target)) target.stun(1100);
+    });
+  }
+
+  /**
+   * 거미줄 스윙(스파이더맨): 아래쪽 좌우 비스듬한 방향으로 거미줄을 쏴서 가장 아래쪽에 맞은 벽이나 장애물을 고르고,
+   * 그 지점을 향해 0.4초 동안 끌려간다
+   */
+  private _webSwing(marble: Marble) {
+    const from = marble.position;
+    const RANGE = 9;
+    let anchor: { x: number; y: number } | null = null;
+    for (const side of [-1, 1]) {
+      for (let deg = 25; deg <= 65; deg += 10) {
+        const a = (deg * Math.PI) / 180;
+        const dx = Math.sin(a) * side;
+        const dy = Math.cos(a);
+        // 벽뿐 아니라 경사판·못 같은 장애물에도 붙는다
+        const f = this.physics.rayFraction(from.x, from.y, from.x + dx * RANGE, from.y + dy * RANGE);
+        if (f >= 1 || f * RANGE < 1.5) continue;
+        const hit = { x: from.x + dx * RANGE * f, y: from.y + dy * RANGE * f };
+        if (!anchor || hit.y > anchor.y) anchor = hit;
+      }
+    }
+    if (!anchor) return;
+    const target = anchor;
+    this._effects.push(
+      new TetherEffect(
+        () => (this._alive(marble) ? marble.position : null),
+        () => target,
+        '#ffffff',
+        650,
+        'web'
+      )
+    );
+    for (let i = 0; i < 8; i++) {
+      this._schedule(i * 50, () => {
+        if (!this._alive(marble)) return;
+        const p = marble.position;
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 0.8) return;
+        this.physics.setVelocity(marble.id, (dx / d) * 13, (dy / d) * 13);
+      });
+    }
+  }
+
+  /** 천둥 망치(토르): 0.25초 뒤 1등에게 하늘에서 벼락이 떨어져 1초 멈추고 주변 구슬이 날아간다 */
+  private _thunderStrike(marble: Marble) {
+    const leader = this._leader(marble);
+    if (!leader) return;
+    const color = getSkillView(Skills.Thunder).color;
+    this._schedule(250, () => {
+      if (!this._alive(leader)) return;
+      const p = leader.position;
+      this._effects.push(new LightningTrail({ x: p.x + 0.4, y: p.y - 14 }, p, color, 14, 0.5));
+      this._effects.push(new SkillEffect(p.x, p.y, Skills.Thunder, false));
+      leader.stun(1000);
+      this._blastFrom(p, 2.8, 8, [leader, marble]);
+    });
+  }
+
+  /** 헐크 스매시: 아래로 세게 내리꽂고, 0.35초 뒤 그 자리에서 충격파로 주변을 날린다 */
+  private _smash(marble: Marble) {
+    this.physics.applyImpulse(marble.id, 0, 18);
+    this._schedule(350, () => {
+      if (!this._alive(marble)) return;
+      const p = marble.position;
+      this._effects.push(new SkillEffect(p.x, p.y, Skills.Smash, false));
+      this._blastFrom(p, getSkillView(Skills.Smash).effectRadius, 10, [marble]);
+    });
   }
 
   /** 반지름 안에 있는 구슬들. except는 빼고 */

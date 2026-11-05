@@ -666,3 +666,12 @@ div.toast {
     }
   }
 }
+
+// 스킬 팩 행. 능력·모노전투일 때만 보인다
+#settings div.right div.row.row-pack {
+  display: none;
+
+  &.active {
+    display: flex;
+  }
+}

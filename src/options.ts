@@ -1,9 +1,11 @@
-import type { SkillMode } from './data/constants';
+import type { SkillMode, SkillPack } from './data/constants';
 
 export type WinnerRange = { start: number; end: number };
 
 class Options {
   skillMode: SkillMode = 'basic';
+  /** 능력·모노전투에서 쓸 스킬 팩 */
+  skillPack: SkillPack = 'general';
   /** 현재 테마 이름(constants.Themes의 키). 스킬 이름·아이콘 색이 테마를 따라간다 */
   themeName: string = 'dark';
   /** 0-based, 양끝 포함. 1명 추첨은 start === end */
