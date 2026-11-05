@@ -98,7 +98,7 @@ export class RankRenderer implements UIObject {
     }
 
     // 능력 모드에서는 이름 왼쪽에 능력 배지를 붙여 목록에서도 한눈에 보이게 한다
-    const showBadge = options.skillMode === 'rpg';
+    const showBadge = options.abilityMode;
     const drawRow = (marble: Marble, text: string, y: number) => {
       ctx.fillStyle = `hsl(${marble.hue} 100% ${theme.marbleLightness}`;
       if (theme.rankStroke) ctx.strokeText(text, startX, 20 + y);

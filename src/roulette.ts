@@ -5,14 +5,14 @@ import { getSkillPool, getSkillView, skillBadgeSvg } from './data/skills';
 import { FastForwader } from './fastForwader';
 import type { GameObject } from './gameObject';
 import type { IPhysics } from './IPhysics';
-import { Marble } from './marble';
+import { GROW_RADIUS, Marble } from './marble';
 import { Minimap } from './minimap';
 import options, { type WinnerRange } from './options';
 import { ParticleManager } from './particleManager';
 import { Box2dPhysics } from './physics-box2d';
 import { RankRenderer } from './rankRenderer';
 import { RouletteRenderer } from './rouletteRenderer';
-import { SkillEffect } from './skillEffect';
+import { LightningTrail, Projectile, SkillEffect } from './skillEffect';
 import type { ColorTheme } from './types/ColorTheme';
 import type { MouseEventHandlerName, MouseEventName } from './types/mouseEvents.type';
 import type { UIObject } from './UIObject';
@@ -45,6 +45,8 @@ export class Roulette extends EventTarget {
   protected _renderer: RouletteRenderer;
 
   private _effects: GameObject[] = [];
+  /** 스킬이 예약해 둔 후속 동작(연속 대시·연사). 시뮬레이션 시간으로 흐른다 */
+  private _tasks: { delay: number; run: () => void }[] = [];
 
   private _winnerRange: WinnerRange = { start: 0, end: 0 };
   private _goalDist: number = Infinity;
@@ -189,14 +191,13 @@ export class Roulette extends EventTarget {
         physics.impact(marble.id);
         break;
       case Skills.Dash:
-        physics.applyImpulse(marble.id, 0, 14);
+        this._startDash(marble);
         break;
-      case Skills.Jump:
-        physics.applyImpulse(marble.id, 0, -12);
+      case Skills.Gun:
+        this._startGun(marble);
         break;
       case Skills.Feather:
       case Skills.Anchor:
-      case Skills.AntiGravity:
         marble.startEffect(skill);
         break;
       case Skills.Magnet:
@@ -204,29 +205,28 @@ export class Roulette extends EventTarget {
         break;
       case Skills.Freeze:
         // 주변 구슬을 잠시 얼린다. 순간 정지가 아니라 한동안 움직이지 못한다
-        this._marblesAround(marble, getSkillView(Skills.Freeze).effectRadius).forEach((m) => m.stun(900));
+        this._marblesAround(marble.position, getSkillView(Skills.Freeze).effectRadius, marble).forEach((m) =>
+          m.stun(900)
+        );
         break;
-      case Skills.Ghost:
+      case Skills.Ghost: {
+        // 아래로 곧게 빠져나가게 옆으로 가던 속도는 죽이고 아래로 밀어 준다
+        const v = physics.getVelocity(marble.id);
+        physics.setVelocity(marble.id, v.x * 0.2, Math.max(v.y, 4));
         physics.setGhost(marble.id, true);
         marble.startEffect(skill);
         break;
+      }
       case Skills.Grow:
-        physics.setRadius(marble.id, MARBLE_RADIUS * 2);
-        marble.size = MARBLE_RADIUS * 4;
-        marble.startEffect(skill);
-        break;
-      case Skills.Shrink:
-        physics.setRadius(marble.id, MARBLE_RADIUS * 0.5);
-        marble.size = MARBLE_RADIUS;
+        physics.setRadius(marble.id, GROW_RADIUS);
+        physics.setPassObstacles(marble.id, true);
+        marble.size = GROW_RADIUS * 2;
         marble.startEffect(skill);
         break;
       case Skills.Bouncy:
-        physics.setRestitution(marble.id, 1.5);
+        // 1을 넘기면 부딪힐 때마다 에너지가 늘어 범퍼 사이를 영원히 튕긴다
+        physics.setRestitution(marble.id, 0.9);
         marble.startEffect(skill);
-        break;
-      case Skills.Brake:
-        // 그 자리에 잠깐 멈춰 선다
-        marble.stun(700);
         break;
       case Skills.Swap: {
         const targetId = physics.swapWithMarbleAhead(marble.id, 12);
@@ -240,17 +240,11 @@ export class Roulette extends EventTarget {
         break;
       }
       case Skills.SlowField:
-        this._marblesAround(marble, getSkillView(Skills.SlowField).effectRadius).forEach((m) => m.slow(1500));
-        break;
-      case Skills.Boost:
-        physics.scaleVelocity(marble.id, 2.2);
-        break;
-      case Skills.Zigzag:
-        physics.applyImpulse(marble.id, (Math.random() < 0.5 ? -1 : 1) * 12, -3);
+        this._throwSlowField(marble);
         break;
       case Skills.Hex: {
         // 나보다 앞서 있는(아래쪽) 구슬 중 하나를 골라 멈춘다. 없으면 아무나
-        const others = this._marbles.filter((m) => m !== marble && !m.isStunned);
+        const others = this._marbles.filter((m) => m !== marble && m.canBeStunned);
         const ahead = others.filter((m) => m.y > marble.y);
         const pool = ahead.length > 0 ? ahead : others;
         const target = pool[Math.floor(Math.random() * pool.length)];
@@ -267,16 +261,145 @@ export class Roulette extends EventTarget {
     }
   }
 
-  /** 반지름 안에 있는 다른 구슬들 */
-  private _marblesAround(marble: Marble, radius: number): Marble[] {
-    const { x, y } = marble.position;
-    return this._marbles.filter((m) => m !== marble && Math.hypot(m.x - x, m.y - y) < radius);
+  private _alive(marble: Marble) {
+    return this._marbles.includes(marble);
   }
 
-  /** 능력 모드에서 구슬마다 스킬을 나눠 준다. 현재 테마의 세트를 골고루 돌리되 순서는 매번 섞는다 */
+  private _schedule(delay: number, run: () => void) {
+    this._tasks.push({ delay, run });
+  }
+
+  private _updateTasks(deltaTime: number) {
+    if (this._tasks.length === 0) return;
+    const due: (() => void)[] = [];
+    this._tasks = this._tasks.filter((task) => {
+      task.delay -= deltaTime;
+      if (task.delay > 0) return true;
+      due.push(task.run);
+      return false;
+    });
+    due.forEach((run) => run());
+  }
+
+  /**
+   * 번개 돌진: 0.12초 간격으로 다섯 번 순간이동한다. 매번 아래쪽 반원(좌우 75도까지)에서
+   * 벽·장애물에 막히지 않는 방향을 골라 그 끝까지 번쩍 이동하고, 지난번과 반대쪽으로 꺾으려 한다
+   */
+  private _startDash(marble: Marble) {
+    const DASHES = 5;
+    const LENGTH = 2.8;
+    let lastSide = Math.random() < 0.5 ? -1 : 1;
+    const dashOnce = () => {
+      if (!this._alive(marble) || marble.isStunned) return;
+      const from = marble.position;
+      const candidates: { dx: number; dy: number; dist: number; side: number }[] = [];
+      for (let deg = -75; deg <= 75; deg += 15) {
+        const a = (deg * Math.PI) / 180;
+        const dx = Math.sin(a);
+        const dy = Math.cos(a);
+        const frac = this.physics.clearFraction(
+          from.x,
+          from.y,
+          from.x + dx * LENGTH,
+          from.y + dy * LENGTH,
+          MARBLE_RADIUS
+        );
+        const dist = frac * LENGTH - MARBLE_RADIUS - 0.05;
+        if (dist > 0.8) candidates.push({ dx, dy, dist, side: Math.sign(deg) });
+      }
+      if (candidates.length === 0) return;
+      const longest = Math.max(...candidates.map((c) => c.dist));
+      const good = candidates.filter((c) => c.dist >= longest * 0.7);
+      const zig = good.filter((c) => c.side === -lastSide);
+      const pool = zig.length > 0 ? zig : good;
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (pick.side !== 0) lastSide = pick.side;
+      const to = { x: from.x + pick.dx * pick.dist, y: from.y + pick.dy * pick.dist };
+      this.physics.teleport(marble.id, to.x, to.y);
+      this.physics.setVelocity(marble.id, pick.dx * 5, pick.dy * 5);
+      this._effects.push(new LightningTrail(from, to, '#ffe066'));
+    };
+    for (let i = 0; i < DASHES; i++) {
+      this._schedule(i * 120, dashOnce);
+    }
+  }
+
+  /** 총격: 가까운 구슬 다섯에게 0.09초 간격으로 총알을 쏜다. 맞으면 총알 방향으로 날아간다 */
+  private _startGun(marble: Marble) {
+    const RANGE = 9;
+    const SHOTS = 5;
+    const origin = marble.position;
+    const targets = this._marblesAround(origin, RANGE, marble)
+      .sort((p, q) => Math.hypot(p.x - origin.x, p.y - origin.y) - Math.hypot(q.x - origin.x, q.y - origin.y))
+      .slice(0, SHOTS);
+    targets.forEach((target, i) => {
+      this._schedule(i * 90, () => {
+        if (!this._alive(marble) || !this._alive(target)) return;
+        const from = marble.position;
+        this._effects.push(
+          new Projectile(
+            from,
+            () => (this._alive(target) ? target.position : null),
+            110,
+            { color: '#ff4757', size: 0.09 },
+            (at) => {
+              const dx = at.x - from.x;
+              const dy = at.y - from.y;
+              const len = Math.hypot(dx, dy) || 1;
+              this.physics.applyImpulse(target.id, (dx / len) * 9, (dy / len) * 9 - 2);
+              this._effects.push(new SkillEffect(at.x, at.y, Skills.Gun, false));
+            }
+          )
+        );
+      });
+    });
+  }
+
+  /** 둔화탄: 1등(나 말고 가장 앞선 구슬)에게 구체를 던져, 떨어진 자리 주변 구슬을 느리게 만든다 */
+  private _throwSlowField(marble: Marble) {
+    const leader = this._marbles
+      .filter((m) => m !== marble)
+      .reduce<Marble | null>((best, m) => {
+        return !best || m.y > best.y ? m : best;
+      }, null);
+    if (!leader) return;
+    const radius = getSkillView(Skills.SlowField).effectRadius;
+    this._effects.push(
+      new Projectile(
+        marble.position,
+        () => (this._alive(leader) ? leader.position : null),
+        380,
+        { color: '#81ecec', size: 0.22, arc: 1.5 },
+        (at) => {
+          this._marblesAround(at, radius, marble).forEach((m) => m.slow(2000));
+          this._effects.push(new SkillEffect(at.x, at.y, Skills.SlowField, false));
+        }
+      )
+    );
+  }
+
+  /** 반지름 안에 있는 구슬들. except는 빼고 */
+  private _marblesAround(center: { x: number; y: number }, radius: number, except?: Marble): Marble[] {
+    return this._marbles.filter((m) => m !== except && Math.hypot(m.x - center.x, m.y - center.y) < radius);
+  }
+
+  /**
+   * 능력을 나눠 준다. 능력 모드는 현재 테마 세트를 골고루 돌리되 순서는 매번 섞고,
+   * 모노전투는 모든 구슬에 같은 스킬(랜덤이면 하나를 뽑아서)을 준다
+   */
   private _assignAbilities() {
     const poolSkills = getSkillPool().map((v) => v.skill);
     if (poolSkills.length === 0) return;
+    if (options.skillMode === 'mono') {
+      const chosen =
+        options.monoSkill !== 'random' && poolSkills.includes(options.monoSkill as Skills)
+          ? (options.monoSkill as Skills)
+          : poolSkills[Math.floor(Math.random() * poolSkills.length)];
+      this._marbles.forEach((marble) => {
+        marble.ability = chosen;
+      });
+      return;
+    }
     let pool = shuffle(poolSkills);
     [...this._marbles]
       .sort((a, b) => a.id - b.id)
@@ -284,6 +407,17 @@ export class Roulette extends EventTarget {
         if (i % pool.length === 0 && i > 0) pool = shuffle(poolSkills);
         marble.ability = pool[i % pool.length];
       });
+  }
+
+  /** 스킬 모드가 바뀌었을 때 능력을 다시 나눈다 */
+  public refreshAbilities() {
+    this._assignAbilities();
+  }
+
+  /** 모노전투 스킬 지정. 'random' 또는 스킬 번호 문자열 */
+  public setMonoSkill(value: string) {
+    options.monoSkill = value === 'random' ? 'random' : Number(value);
+    this._assignAbilities();
   }
 
   /** 능력 모드 목록 창에 보여줄 구슬별 능력. 생성 순서(id) 기준 */
@@ -358,6 +492,7 @@ export class Roulette extends EventTarget {
   }
 
   private _updateEffects(deltaTime: number) {
+    this._updateTasks(deltaTime);
     this._effects.forEach((effect) => effect.update(deltaTime));
     this._effects = this._effects.filter((effect) => !effect.isDestroy);
   }
@@ -474,6 +609,7 @@ export class Roulette extends EventTarget {
   public clearMarbles() {
     this._pendingRemovals.forEach((id) => window.clearTimeout(id));
     this._pendingRemovals = [];
+    this._tasks = [];
     this.physics.clearMarbles();
     this._result = null;
     this._winners = [];

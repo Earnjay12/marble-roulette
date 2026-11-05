@@ -38,16 +38,6 @@ const RESULT_COLUMN_MAX_WIDTH = 280;
 const PROGRESS_MAX_WIDTH_RATIO = 0.3;
 const PROGRESS_ACCENT = 'rgba(255, 215, 0, 0.8)';
 
-/** 판타지 테마의 별. 매 프레임 같은 자리에 있어야 하므로 한 번만 뽑아 둔다 ([x비율, y비율, 크기 0~1]) */
-const STARS: [number, number, number][] = (() => {
-  let seed = 7;
-  const rand = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
-  return Array.from({ length: 140 }, () => [rand(), rand(), rand()]);
-})();
-
 function inRect(rect: Rect | undefined, x: number, y: number): boolean {
   return !!rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 }
@@ -221,47 +211,11 @@ export class RouletteRenderer {
           }
         }
         break;
-      case 'stars':
-        for (const [sx, sy, size] of STARS) {
-          ctx.globalAlpha = 0.3 + size * 0.5;
-          ctx.beginPath();
-          ctx.arc(sx * w, sy * h, 0.6 + size * 1.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      case 'grid':
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let x = 0; x < w; x += 48) {
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, h);
-        }
-        for (let y = 0; y < h; y += 48) {
-          ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
-        }
-        ctx.stroke();
-        break;
-      case 'paper':
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let y = 36; y < h; y += 32) {
-          ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
-        }
-        ctx.stroke();
-        // 공책의 빨간 세로 여백선
-        ctx.strokeStyle = 'rgba(214, 48, 49, 0.35)';
-        ctx.beginPath();
-        ctx.moveTo(w * 0.12, 0);
-        ctx.lineTo(w * 0.12, h);
-        ctx.stroke();
-        break;
     }
     ctx.restore();
   }
 
-  /** 장애물. 테마의 entityStyle에 따라 크롬 레일·보석 범퍼·네온관·연필 낙서로 다르게 꾸민다 */
+  /** 장애물. 테마의 entityStyle에 따라 꾸민다(핀볼은 크롬 레일과 범퍼) */
   private renderEntities(entities: MapEntityState[]) {
     const ctx = this.ctx;
     const style = this._theme.entityStyle;
@@ -285,10 +239,10 @@ export class RouletteRenderer {
           break;
         case 'box':
           ctx.rotate(shape.rotation);
-          this.drawBox(shape.width * 2, shape.height * 2, style, lw, fill);
+          this.drawBox(shape.width * 2, shape.height * 2, style, lw);
           break;
         case 'circle':
-          this.drawCircle(shape.radius, style, lw, fill);
+          this.drawCircle(shape.radius, style, lw);
           break;
       }
       ctx.lineWidth = lw;
@@ -321,52 +275,13 @@ export class RouletteRenderer {
         ctx.strokeStyle = outline;
         ctx.stroke();
         break;
-      case 'fantasy':
-        // 덩굴처럼 감긴 빛
-        this.tracePolyline(points);
-        ctx.lineWidth = lw * 1.5;
-        ctx.stroke();
-        ctx.save();
-        ctx.setLineDash([0.35, 0.55]);
-        ctx.lineWidth = lw * 3.5;
-        ctx.globalAlpha *= 0.35;
-        this.tracePolyline(points);
-        ctx.stroke();
-        ctx.restore();
-        break;
-      case 'cyber':
-        // 네온관: 넓고 흐린 빛 위에 가늘고 흰 심지
-        ctx.save();
-        ctx.globalAlpha *= 0.4;
-        ctx.lineWidth = lw * 4;
-        this.tracePolyline(points);
-        ctx.stroke();
-        ctx.restore();
-        this.tracePolyline(points);
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
-        break;
-      case 'sketch':
-        // 연필로 두 번 그은 선
-        ctx.save();
-        ctx.lineWidth = lw * 1.4;
-        ctx.globalAlpha *= 0.85;
-        this.tracePolyline(points);
-        ctx.stroke();
-        ctx.translate(0.06, 0.05);
-        ctx.globalAlpha *= 0.5;
-        this.tracePolyline(points);
-        ctx.stroke();
-        ctx.restore();
-        break;
       default:
         this.tracePolyline(points);
         ctx.stroke();
     }
   }
 
-  private drawBox(w: number, h: number, style: EntityStyle, lw: number, fill: string) {
+  private drawBox(w: number, h: number, style: EntityStyle, lw: number) {
     const ctx = this.ctx;
     const rect = () => ctx.fillRect(-w / 2, -h / 2, w, h);
     const frame = () => ctx.strokeRect(-w / 2, -h / 2, w, h);
@@ -384,45 +299,13 @@ export class RouletteRenderer {
         ctx.stroke();
         ctx.restore();
         break;
-      case 'fantasy': {
-        const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-        g.addColorStop(0, '#fff6c8');
-        g.addColorStop(0.5, fill);
-        g.addColorStop(1, '#8a5a12');
-        ctx.fillStyle = g;
-        rect();
-        frame();
-        break;
-      }
-      case 'cyber':
-        ctx.save();
-        ctx.globalAlpha *= 0.35;
-        rect();
-        ctx.restore();
-        ctx.lineWidth = lw * 1.6;
-        frame();
-        break;
-      case 'sketch':
-        ctx.save();
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha *= 0.25;
-        rect();
-        ctx.globalAlpha /= 0.25;
-        ctx.globalAlpha *= 0.9;
-        ctx.lineWidth = lw * 1.4;
-        frame();
-        ctx.translate(0.05, 0.04);
-        ctx.globalAlpha *= 0.45;
-        frame();
-        ctx.restore();
-        break;
       default:
         rect();
         frame();
     }
   }
 
-  private drawCircle(r: number, style: EntityStyle, lw: number, fill: string) {
+  private drawCircle(r: number, style: EntityStyle, lw: number) {
     const ctx = this.ctx;
     const circle = (rr: number) => {
       ctx.beginPath();
@@ -446,43 +329,6 @@ export class RouletteRenderer {
         ctx.fillStyle = '#ffffff';
         circle(r * 0.18);
         ctx.fill();
-        break;
-      case 'fantasy': {
-        // 마법 구슬: 밝은 심에서 색으로 번지는 구면
-        const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r);
-        g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-        g.addColorStop(0.6, fill);
-        g.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
-        circle(r);
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.lineWidth = lw;
-        ctx.stroke();
-        break;
-      }
-      case 'cyber':
-        circle(r);
-        ctx.lineWidth = lw * 2;
-        ctx.stroke();
-        ctx.save();
-        ctx.setLineDash([r * 0.35, r * 0.25]);
-        ctx.lineWidth = lw;
-        circle(r * 0.65);
-        ctx.stroke();
-        ctx.restore();
-        break;
-      case 'sketch':
-        ctx.save();
-        ctx.shadowBlur = 0;
-        ctx.lineWidth = lw * 1.5;
-        ctx.globalAlpha *= 0.9;
-        circle(r);
-        ctx.stroke();
-        ctx.translate(0.05, 0.04);
-        ctx.globalAlpha *= 0.45;
-        circle(r * 0.96);
-        ctx.stroke();
-        ctx.restore();
         break;
       default:
         circle(r);

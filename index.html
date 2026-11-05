@@ -204,11 +204,30 @@
       document.querySelectorAll('.btn-skill').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.skill === mode);
       });
-      document.querySelector('#btnAbilities').classList.toggle('visible', mode === 'rpg');
+      const abilityMode = mode === 'rpg' || mode === 'mono';
+      document.querySelector('#btnAbilities').classList.toggle('visible', abilityMode);
+      document.querySelector('.row-mono').classList.toggle('active', mode === 'mono');
+      window.roulette.refreshAbilities();
     };
     document.querySelectorAll('.btn-skill').forEach((btn) => {
       btn.addEventListener('click', () => applySkillMode(btn.dataset.skill));
     });
+
+    // 모노전투에서 모든 구슬이 쓸 스킬. 랜덤이면 섞을 때마다 하나를 뽑는다
+    const monoSelect = document.querySelector('#sltMonoSkill');
+    const fillMonoOptions = () => {
+      const saved = localStorage.getItem('mbr_mono') || 'random';
+      monoSelect.innerHTML =
+        '<option value="random">🎲 랜덤</option>' +
+        window.roulette.getSkillList().map((s) => `<option value="${s.skill}">${s.name}</option>`).join('');
+      monoSelect.value = [...monoSelect.options].some((o) => o.value === saved) ? saved : 'random';
+      window.roulette.setMonoSkill(monoSelect.value);
+    };
+    monoSelect.addEventListener('change', () => {
+      localStorage.setItem('mbr_mono', monoSelect.value);
+      window.roulette.setMonoSkill(monoSelect.value);
+    });
+    fillMonoOptions();
     applySkillMode(localStorage.getItem('mbr_skill') || 'basic');
 
     // 능력표 창: 스킬 설명과 구슬별 배정 결과
@@ -249,14 +268,17 @@
     // 테마
     const applyTheme = (name) => {
       window.roulette.setTheme(name);
-      document.documentElement.classList.toggle('light', name === 'doodle');
       document.documentElement.dataset.theme = name;
       localStorage.setItem('mbr_theme', name);
     };
     const themeSelect = document.querySelector('#sltTheme');
-    themeSelect.value = localStorage.getItem('mbr_theme') || 'dark';
+    const savedTheme = localStorage.getItem('mbr_theme');
+    themeSelect.value = [...themeSelect.options].some((o) => o.value === savedTheme) ? savedTheme : 'dark';
     applyTheme(themeSelect.value);
-    themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+    themeSelect.addEventListener('change', (e) => {
+      applyTheme(e.target.value);
+      fillMonoOptions();
+    });
 
     document.querySelector('#in_winningRank').addEventListener('change', () => selectWinnerType('custom'));
     document.querySelector('.btn-last-winner').addEventListener('click', () => selectWinnerType('last'));
@@ -354,7 +376,12 @@
           <button class="btn-skill" data-skill="none" data-trans>None</button>
           <button class="btn-skill active" data-skill="basic" data-trans>Basic</button>
           <button class="btn-skill" data-skill="rpg" data-trans>Abilities</button>
+          <button class="btn-skill" data-skill="mono" data-trans>Mono battle</button>
         </div>
+      </div>
+      <div class="row row-mono">
+        <label></label>
+        <select id="sltMonoSkill"></select>
       </div>
       <div class="row">
         <label>
@@ -384,9 +411,6 @@
         <select id="sltTheme">
           <option value="dark" data-trans>Classic</option>
           <option value="pinball" data-trans>Pinball</option>
-          <option value="fantasy" data-trans>Fantasy</option>
-          <option value="cyber" data-trans>Cyber City</option>
-          <option value="doodle" data-trans>Doodle</option>
         </select>
       </div>
     </div>

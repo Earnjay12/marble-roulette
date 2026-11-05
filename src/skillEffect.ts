@@ -24,10 +24,13 @@ export class SkillEffect implements GameObject {
   private _elapsed = 0;
   private _view: SkillView;
   private _particles: Particle[];
+  private _showBadge: boolean;
 
-  constructor(x: number, y: number, skill: Skills) {
+  /** showBadge가 false면 링·입자만 그린다(둔화탄 착탄 지점처럼 배지가 겹치면 지저분한 곳) */
+  constructor(x: number, y: number, skill: Skills, showBadge = true) {
     this.position = { x, y };
     this._view = getSkillView(skill);
+    this._showBadge = showBadge;
     this._particles = this._spawnParticles();
   }
 
@@ -48,34 +51,21 @@ export class SkillEffect implements GameObject {
         });
       }
     };
-    const stream = (n: number, vyMin: number, vyMax: number, spread: number, size: number) => {
-      for (let i = 0; i < n; i++) {
-        out.push({
-          x: rand(-spread, spread),
-          y: rand(-0.3, 0.3),
-          vx: rand(-0.4, 0.4),
-          vy: rand(vyMin, vyMax),
-          size,
-          life: rand(0.6, 1),
-        });
-      }
-    };
 
     switch (this._view.effect) {
       case 'burst':
         radial(18, R * 1.5, 0.16);
         break;
-      case 'down':
-        stream(10, 6, 12, 0.5, 0.1);
+      case 'dash':
+        radial(10, 5, 0.08);
         break;
-      case 'boost':
-        stream(10, 9, 16, 0.4, 0.09);
-        break;
-      case 'up':
-        stream(10, -12, -6, 0.5, 0.1);
+      case 'gun':
+        radial(8, 4, 0.07);
         break;
       case 'slap':
-        stream(8, -9, -4, 0.7, 0.12);
+        for (let i = 0; i < 8; i++) {
+          out.push({ x: rand(-0.7, 0.7), y: 0, vx: rand(-0.4, 0.4), vy: rand(-9, -4), size: 0.12, life: rand(0.6, 1) });
+        }
         break;
       case 'float':
         for (let i = 0; i < 8; i++) {
@@ -86,18 +76,6 @@ export class SkillEffect implements GameObject {
             vy: rand(-1.6, -0.6),
             size: 0.18,
             life: rand(0.7, 1),
-          });
-        }
-        break;
-      case 'rise':
-        for (let i = 0; i < 9; i++) {
-          out.push({
-            x: rand(-0.6, 0.6),
-            y: rand(0, 0.4),
-            vx: rand(-0.3, 0.3),
-            vy: rand(-4, -2),
-            size: rand(0.08, 0.2),
-            life: rand(0.6, 1),
           });
         }
         break;
@@ -117,9 +95,6 @@ export class SkillEffect implements GameObject {
       case 'pull':
         radial(16, -R * 1.4, 0.13, R);
         break;
-      case 'shrink':
-        radial(12, -3, 0.1, 2.2);
-        break;
       case 'frost':
         radial(12, R * 0.5, 0.1);
         break;
@@ -136,9 +111,6 @@ export class SkillEffect implements GameObject {
           out.push({ x: rand(-0.4, 0.4), y: 0.3, vx: rand(-2, 2), vy: rand(-5, -2), size: 0.1, life: rand(0.6, 1) });
         }
         break;
-      case 'stop':
-        radial(8, 2, 0.1);
-        break;
       case 'swap':
         for (let i = 0; i < 10; i++) {
           const dir = i % 2 === 0 ? 1 : -1;
@@ -146,13 +118,7 @@ export class SkillEffect implements GameObject {
         }
         break;
       case 'slow':
-        radial(12, R * 0.45, 0.09);
-        break;
-      case 'zigzag':
-        for (let i = 0; i < 8; i++) {
-          const dir = i % 2 === 0 ? 1 : -1;
-          out.push({ x: 0, y: rand(-0.3, 0.3), vx: dir * rand(4, 8), vy: rand(-1, 1), size: 0.1, life: rand(0.6, 1) });
-        }
+        radial(14, R * 0.45, 0.09);
         break;
       case 'hex':
         radial(12, 3, 0.12);
@@ -167,7 +133,7 @@ export class SkillEffect implements GameObject {
   update(deltaTime: number) {
     this._elapsed += deltaTime;
     const s = deltaTime / 1000;
-    const gravity = ['burst', 'drop', 'zigzag', 'stop', 'bounce', 'slap'].includes(this._view.effect) ? 8 : 0;
+    const gravity = ['burst', 'drop', 'bounce', 'slap', 'dash', 'gun'].includes(this._view.effect) ? 8 : 0;
     for (const p of this._particles) {
       p.x += p.vx * s;
       p.y += p.vy * s;
@@ -255,24 +221,9 @@ export class SkillEffect implements GameObject {
         ring(R * ease, 4);
         ring(R * ease * 0.75, 2);
         break;
-      case 'shrink':
-        ring(2.2 * (1 - ease) + 0.3, 3);
-        break;
-      case 'stop':
-        polygon(R * (0.55 + 0.45 * ease), 8, 4, 0.3);
-        break;
       case 'slow':
         ring(R * ease, 2.5, [0.4, 0.3]);
-        ctx.save();
-        ctx.lineWidth = lw(3);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(
-          Math.cos(rate * Math.PI * 4 - Math.PI / 2) * R * 0.5,
-          Math.sin(rate * Math.PI * 4 - Math.PI / 2) * R * 0.5
-        );
-        ctx.stroke();
-        ctx.restore();
+        polygon(R * ease * 0.7, 8, 1.5, 0.15);
         break;
       case 'shield':
         polygon(R * (0.5 + 0.5 * ease), 6, 4, 0.25);
@@ -313,7 +264,6 @@ export class SkillEffect implements GameObject {
     }
 
     // 입자
-    const streak = ['down', 'up', 'boost', 'slap', 'swap', 'zigzag'].includes(view.effect);
     for (const p of this._particles) {
       ctx.globalAlpha = alpha * p.life;
       if (view.effect === 'fade') {
@@ -321,7 +271,7 @@ export class SkillEffect implements GameObject {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * (1 + rate), 0, Math.PI * 2);
         ctx.stroke();
-      } else if (streak) {
+      } else if (view.effect === 'slap' || view.effect === 'swap') {
         ctx.lineWidth = lw(p.size * zoom * 0.35 + 1);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
@@ -339,21 +289,147 @@ export class SkillEffect implements GameObject {
     }
 
     // 배지가 커지며 떠오르고, 아래에 스킬 이름이 따라붙는다
+    if (this._showBadge) {
+      ctx.globalAlpha = 1 - rate;
+      ctx.shadowBlur = 0;
+      ctx.translate(0, -0.6 - ease * 1.6);
+      ctx.scale(1 / zoom, 1 / zoom);
+      const badgeSize = 22 + 30 * ease;
+      drawSkillBadge(ctx, view.skill, 0, 0, badgeSize);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeText(view.name, 0, badgeSize / 2 + 3);
+      ctx.fillText(view.name, 0, badgeSize / 2 + 3);
+    }
+    ctx.restore();
+  }
+}
+
+/** 번개 돌진의 궤적. 두 점 사이를 지그재그 번개로 잇고 빠르게 사라진다 */
+export class LightningTrail implements GameObject {
+  position: VectorLike;
+  isDestroy = false;
+  private _elapsed = 0;
+  private _points: [number, number][];
+  private _color: string;
+
+  constructor(from: VectorLike, to: VectorLike, color: string) {
+    this.position = { x: from.x, y: from.y };
+    this._color = color;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const segments = 7;
+    this._points = [[from.x, from.y]];
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const off = rand(-0.28, 0.28);
+      this._points.push([from.x + dx * t + nx * off, from.y + dy * t + ny * off]);
+    }
+    this._points.push([to.x, to.y]);
+  }
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > 380) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const rate = Math.min(1, this._elapsed / 380);
+    ctx.save();
     ctx.globalAlpha = 1 - rate;
-    ctx.shadowBlur = 0;
-    ctx.translate(0, -0.6 - ease * 1.6);
-    ctx.scale(1 / zoom, 1 / zoom);
-    const badgeSize = 22 + 30 * ease;
-    drawSkillBadge(ctx, view.skill, 0, 0, badgeSize);
-    ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowColor = this._color;
+    ctx.shadowBlur = 18;
+    const trace = () => {
+      ctx.beginPath();
+      ctx.moveTo(this._points[0][0], this._points[0][1]);
+      for (const [x, y] of this._points.slice(1)) ctx.lineTo(x, y);
+    };
+    ctx.strokeStyle = this._color;
+    ctx.lineWidth = 9 / zoom;
+    trace();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3 / zoom;
+    trace();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
+ * 한 점에서 다른 점으로 날아가는 탄(총알·둔화 구체). 도착하면 onArrive를 부른다.
+ * 목표가 움직이면 따라가도록 target을 함수로 받는다
+ */
+export class Projectile implements GameObject {
+  position: VectorLike;
+  isDestroy = false;
+  private _elapsed = 0;
+  private _from: VectorLike;
+  private _trail: VectorLike[] = [];
+
+  constructor(
+    from: VectorLike,
+    private _target: () => VectorLike | null,
+    private _flightMs: number,
+    private _style: { color: string; size: number; arc?: number },
+    private _onArrive: (at: VectorLike) => void
+  ) {
+    this._from = { x: from.x, y: from.y };
+    this.position = { x: from.x, y: from.y };
+  }
+
+  update(deltaTime: number) {
+    if (this.isDestroy) return;
+    this._elapsed += deltaTime;
+    const target = this._target();
+    if (!target) {
+      this.isDestroy = true;
+      return;
+    }
+    const t = Math.min(1, this._elapsed / this._flightMs);
+    const arc = (this._style.arc ?? 0) * Math.sin(t * Math.PI);
+    this.position = {
+      x: this._from.x + (target.x - this._from.x) * t,
+      y: this._from.y + (target.y - this._from.y) * t - arc,
+    };
+    this._trail.push({ ...this.position });
+    if (this._trail.length > 6) this._trail.shift();
+    if (t >= 1) {
+      this.isDestroy = true;
+      this._onArrive(this.position);
+    }
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const { color, size } = this._style;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.lineCap = 'round';
+    if (this._trail.length > 1) {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = Math.max(size, 3 / zoom);
+      ctx.beginPath();
+      ctx.moveTo(this._trail[0].x, this._trail[0].y);
+      for (const p of this._trail.slice(1)) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#ffffff';
-    ctx.strokeText(view.name, 0, badgeSize / 2 + 3);
-    ctx.fillText(view.name, 0, badgeSize / 2 + 3);
+    ctx.beginPath();
+    ctx.arc(this.position.x, this.position.y, size, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }

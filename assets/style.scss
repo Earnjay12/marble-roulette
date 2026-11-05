@@ -667,53 +667,16 @@ div.toast {
   }
 }
 
-// 낙서 테마(밝은 배경)에서는 창도 종이색으로
-:root.light #abilities {
-  .modal-panel {
-    background: #fbf7ea;
-    color: #222;
+// 모노전투 스킬 선택 행. 모노전투일 때만 보인다
+#settings div.right div.row.row-mono {
+  display: none;
+
+  &.active {
+    display: flex;
   }
 
-  h2,
-  .modal-action {
-    background: #efe8d2;
-  }
-
-  .legend li {
-    color: #444;
-
-    b {
-      color: #222;
-    }
-  }
-
-  .modal-tabs {
-    background: #efe8d2;
-
-    .tab {
-      background: #e2dac0;
-      color: #555;
-
-      &.active {
-        background: #fbf7ea;
-        color: #222;
-      }
-    }
-  }
-
-  .assign-list li {
-    border-color: #e6dfc8;
-
-    .sk {
-      color: #b7791f;
-    }
-
-    .desc {
-      color: #666;
-    }
-  }
-
-  .modal-action button {
-    background: #2d3436;
+  select {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
