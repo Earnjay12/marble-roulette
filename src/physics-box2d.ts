@@ -71,6 +71,8 @@ export class Box2dPhysics implements IPhysics {
       this.world.DestroyBody(body);
     });
     this.marbleMap = {};
+    this.tempBodies.forEach((body) => this.world.DestroyBody(body));
+    this.tempBodies.clear();
     this.ghostIds.clear();
     this.passObstacleIds.clear();
   }
@@ -485,6 +487,38 @@ export class Box2dPhysics implements IPhysics {
     const mass = target.body.GetMass();
     target.body.ApplyLinearImpulseToCenter(this.vec(0, impulseY * mass), true);
     return target.id;
+  }
+
+  /** 분신처럼 잠깐 놓였다 사라지는 장애물. 라운드가 바뀌면 clearMarbles에서 같이 치운다 */
+  private tempBodies = new Map<number, Box2D.b2Body>();
+  private tempSeq = 0;
+
+  createTempObstacle(x: number, y: number, radius: number): number {
+    const bodyDef = new this.Box2D.b2BodyDef();
+    bodyDef.set_type(this.Box2D.b2_staticBody);
+    bodyDef.set_position(this.vec(x, y));
+    const body = this.world.CreateBody(bodyDef);
+    this.Box2D.destroy(bodyDef);
+    const shape = new this.Box2D.b2CircleShape();
+    shape.set_m_radius(radius);
+    const fixtureDef = new this.Box2D.b2FixtureDef();
+    fixtureDef.set_shape(shape);
+    fixtureDef.set_density(1);
+    fixtureDef.set_restitution(0.3);
+    fixtureDef.get_filter().set_categoryBits(OBSTACLE_CATEGORY);
+    body.CreateFixture(fixtureDef);
+    this.Box2D.destroy(fixtureDef);
+    this.Box2D.destroy(shape);
+    const handle = ++this.tempSeq;
+    this.tempBodies.set(handle, body);
+    return handle;
+  }
+
+  removeTempObstacle(handle: number): void {
+    const body = this.tempBodies.get(handle);
+    if (!body) return;
+    this.world.DestroyBody(body);
+    this.tempBodies.delete(handle);
   }
 
   start(): void {

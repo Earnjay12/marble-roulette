@@ -135,6 +135,15 @@ export class SkillEffect implements GameObject {
       case 'smash':
         radial(20, 9, 0.16);
         break;
+      case 'shadow':
+        radial(14, 2, 0.2);
+        break;
+      case 'ice':
+        radial(10, 2.5, 0.09);
+        break;
+      case 'clone':
+        radial(10, 3, 0.1);
+        break;
     }
     return out;
   }
@@ -547,7 +556,7 @@ export class TetherEffect implements GameObject {
     private _to: () => VectorLike | null,
     private _color: string,
     private _duration: number,
-    private _style: 'web' | 'force'
+    private _style: 'web' | 'force' | 'arm'
   ) {}
 
   update(deltaTime: number) {
@@ -565,7 +574,22 @@ export class TetherEffect implements GameObject {
     ctx.strokeStyle = this._color;
     ctx.shadowColor = this._color;
     ctx.lineCap = 'round';
-    if (this._style === 'web') {
+    if (this._style === 'arm') {
+      // 고무 팔: 굵은 팔과 끝의 주먹
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 0.22;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.fillStyle = this._color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.lineWidth = 1.5 / zoom;
+      ctx.stroke();
+    } else if (this._style === 'web') {
       ctx.shadowBlur = 4;
       ctx.lineWidth = 2.5 / zoom;
       ctx.beginPath();
@@ -647,6 +671,82 @@ export class TimeStopEffect implements GameObject {
     ctx.lineTo(x, y - 0.85);
     ctx.moveTo(x, y);
     ctx.lineTo(x + 0.6, y + 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** 분신: 시전자와 같은 색의 반투명 구슬. 물리 몸체는 roulette이 따로 둔다 */
+export class DecoyEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _at: VectorLike,
+    private _hue: number,
+    private _radius: number,
+    private _duration: number
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    const rate = this._elapsed / this._duration;
+    const flicker = rate > 0.75 ? 0.5 + 0.5 * Math.sin(this._elapsed / 30) : 1;
+    ctx.save();
+    ctx.globalAlpha = 0.55 * flicker;
+    ctx.fillStyle = `hsl(${this._hue} 100% 70%)`;
+    ctx.beginPath();
+    ctx.arc(this._at.x, this._at.y, this._radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.9 * flicker;
+    ctx.setLineDash([0.08, 0.06]);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** 얼음길: 점들을 잇는 반투명한 하늘색 띠. 점 배열은 roulette이 채운다 */
+export class IceTrailEffect implements GameObject {
+  isDestroy = false;
+  private _elapsed = 0;
+
+  constructor(
+    private _points: VectorLike[],
+    private _duration: number
+  ) {}
+
+  update(deltaTime: number) {
+    this._elapsed += deltaTime;
+    if (this._elapsed > this._duration) this.isDestroy = true;
+  }
+
+  render(ctx: CanvasRenderingContext2D, zoom: number) {
+    if (this._points.length < 2) return;
+    const rate = this._elapsed / this._duration;
+    ctx.save();
+    ctx.globalAlpha = rate > 0.8 ? (1 - rate) * 5 : 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#a5f3fc';
+    ctx.shadowBlur = 12;
+    const trace = () => {
+      ctx.beginPath();
+      ctx.moveTo(this._points[0].x, this._points[0].y);
+      for (const p of this._points.slice(1)) ctx.lineTo(p.x, p.y);
+    };
+    ctx.strokeStyle = 'rgba(165, 243, 252, 0.45)';
+    ctx.lineWidth = 0.7;
+    trace();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2 / zoom;
+    trace();
     ctx.stroke();
     ctx.restore();
   }

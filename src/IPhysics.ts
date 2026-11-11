@@ -78,6 +78,11 @@ export interface IPhysics {
   /** 앞(아래)에 있는 가장 가까운 구슬에 충격량을 준다. 맞은 구슬 id */
   pushMarbleAhead(id: number, maxDistance: number, impulseY: number): number | null;
 
+  /** 잠깐 놓이는 둥근 장애물(분신). 손잡이 번호를 돌려준다 */
+  createTempObstacle(x: number, y: number, radius: number): number;
+
+  removeTempObstacle(handle: number): void;
+
   start(): void;
 
   step(deltaSeconds: number): void;

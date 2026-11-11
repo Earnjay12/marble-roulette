@@ -23,6 +23,12 @@ export type EffectKind =
   | 'web'
   | 'thunder'
   | 'smash'
+  | 'clone'
+  | 'punch'
+  | 'repulsor'
+  | 'ice'
+  | 'shield'
+  | 'shadow'
   | 'gun';
 
 export interface SkillDef {
@@ -225,6 +231,57 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     effect: 'smash',
     icon: 'M5 9a2 2 0 014 0V8a2 2 0 014 0v1a2 2 0 014 0v1a2 2 0 014 0v4c0 4.4-3.6 8-8 8h-2c-3.9 0-7-3.1-7-7v-3a2 2 0 011-1.7z',
   },
+  [Skills.Clone]: {
+    name: '분신술',
+    description: '뒤쪽에 분신 둘을 남겨 따라오는 구슬을 막는다',
+    color: '#ff9f1a',
+    effectRadius: 2,
+    effect: 'clone',
+    icon: 'M9 4a6 6 0 110 12A6 6 0 019 4zm6 4a6 6 0 110 12 6 6 0 010-12z',
+    iconRule: 'evenodd',
+  },
+  [Skills.RubberPunch]: {
+    name: '고무 펀치',
+    description: '팔을 쭉 뻗어 앞 구슬을 끌어당기고 그 반동으로 튀어 나간다',
+    color: '#e84118',
+    effectRadius: 2,
+    effect: 'punch',
+    icon: 'M4 8h12a3 3 0 013 3v4a5 5 0 01-5 5H8a4 4 0 01-4-4zM2 10h2v6H2zM6 4h3v4H6zm4 0h3v4h-3zm4 1h3v3h-3z',
+  },
+  [Skills.Repulsor]: {
+    name: '리펄서',
+    description: '아래로 빔을 쏴 떠오른 뒤 뚫린 쪽으로 빠르게 날아간다',
+    color: '#00d2d3',
+    effectRadius: 2,
+    effect: 'repulsor',
+    icon: 'M12 2a5 5 0 110 10 5 5 0 010-10zM10 13h4l1 9H9z',
+  },
+  [Skills.IceBridge]: {
+    name: '얼음 다리',
+    description: '지나간 자리에 얼음길을 깔아 뒤따르는 구슬을 미끄러뜨린다',
+    color: '#a5f3fc',
+    duration: 1500,
+    effectRadius: 2,
+    effect: 'ice',
+    icon: 'M2 20L22 8v4L2 22zM15 3l1.5 3 3 1.5-3 1.5L15 12l-1.5-3-3-1.5 3-1.5z',
+  },
+  [Skills.ShieldThrow]: {
+    name: '방패 던지기',
+    description: '원반 방패를 던져 구슬 셋을 연달아 맞힌다',
+    color: '#e74c3c',
+    effectRadius: 2,
+    effect: 'shield',
+    icon: 'M12 1a11 11 0 110 22 11 11 0 010-22zm0 3a8 8 0 100 16 8 8 0 000-16zm0 3l1.5 3.2 3.5.4-2.6 2.4.7 3.5L12 15.8 8.9 17.5l.7-3.5L7 11.6l3.5-.4z',
+    iconRule: 'evenodd',
+  },
+  [Skills.ShadowStep]: {
+    name: '그림자 이동',
+    description: '앞 구슬의 그림자로 사라졌다가 그 구슬 바로 앞에 나타난다',
+    color: '#636e72',
+    effectRadius: 2,
+    effect: 'shadow',
+    icon: 'M14 2a10 10 0 100 20A8 8 0 0114 2z',
+  },
 };
 
 export const ALL_SKILLS: Skills[] = [
@@ -272,6 +329,12 @@ export const ThemeSkillSets: Record<string, SkillOverride[]> = {
     { skill: Skills.WebSwing },
     { skill: Skills.Thunder },
     { skill: Skills.Smash },
+    { skill: Skills.Clone },
+    { skill: Skills.RubberPunch },
+    { skill: Skills.Repulsor },
+    { skill: Skills.IceBridge },
+    { skill: Skills.ShieldThrow },
+    { skill: Skills.ShadowStep },
   ],
 };
 

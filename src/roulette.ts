@@ -15,6 +15,8 @@ import { RouletteRenderer } from './rouletteRenderer';
 import {
   BeamEffect,
   ChargeEffect,
+  DecoyEffect,
+  IceTrailEffect,
   LightningTrail,
   Projectile,
   SkillEffect,
@@ -55,6 +57,9 @@ export class Roulette extends EventTarget {
   private _effects: GameObject[] = [];
   /** 스킬이 예약해 둔 후속 동작(연속 대시·연사). 시뮬레이션 시간으로 흐른다 */
   private _tasks: { delay: number; run: () => void }[] = [];
+  /** 얼음 다리가 깔아 둔 얼음길과, 방금 미끄러진 구슬의 재발동 대기 시간 */
+  private _iceTrails: { points: { x: number; y: number }[]; caster: Marble; remaining: number }[] = [];
+  private _slipCooldown = new Map<Marble, number>();
 
   private _winnerRange: WinnerRange = { start: 0, end: 0 };
   private _goalDist: number = Infinity;
@@ -272,6 +277,24 @@ export class Roulette extends EventTarget {
       case Skills.Smash:
         this._smash(marble);
         break;
+      case Skills.Clone:
+        this._clone(marble);
+        break;
+      case Skills.RubberPunch:
+        this._rubberPunch(marble);
+        break;
+      case Skills.Repulsor:
+        this._repulsor(marble);
+        break;
+      case Skills.IceBridge:
+        this._iceBridge(marble);
+        break;
+      case Skills.ShieldThrow:
+        this._shieldThrow(marble);
+        break;
+      case Skills.ShadowStep:
+        this._shadowStep(marble);
+        break;
       case Skills.Hex: {
         // 나보다 앞서 있는(아래쪽) 구슬 중 하나를 골라 멈춘다. 없으면 아무나
         const others = this._marbles.filter((m) => m !== marble && m.canBeStunned);
@@ -413,9 +436,14 @@ export class Roulette extends EventTarget {
   }
 
   /** 반지름 r인 구슬이 (x, y)에 들어갈 수 있는지(코스 안, 벽·장애물·다른 구슬과 안 겹침) */
-  private _isFreeSpot(x: number, y: number, except: Marble) {
+  /**
+   * (x, y)에 구슬이 들어갈 수 있는지. origin(기준 구슬 위치)에서 그 자리까지 벽에 막히지 않아야 한다.
+   * 이 검사가 없으면 벽으로 둘러싸인 장애물 도형 안쪽 빈 공간에 순간이동해 갇힌다
+   */
+  private _isFreeSpot(x: number, y: number, except: Marble, origin: { x: number; y: number }) {
     return (
       this.physics.isInsideCourse(x, y) &&
+      this.physics.rayFraction(origin.x, origin.y, x, y) >= 1 &&
       !this.physics.overlapsEntity(x, y, MARBLE_RADIUS) &&
       !this._marbles.some((m) => m !== except && Math.hypot(m.x - x, m.y - y) < MARBLE_RADIUS * 2)
     );
@@ -449,7 +477,7 @@ export class Roulette extends EventTarget {
     for (const [dx, dy] of spots) {
       const x = L.x + dx;
       const y = L.y + dy;
-      if (!this._isFreeSpot(x, y, marble)) continue;
+      if (!this._isFreeSpot(x, y, marble, L)) continue;
       this.physics.teleport(marble.id, x, y);
       const v = this.physics.getVelocity(leader.id);
       this.physics.setVelocity(marble.id, v.x, v.y);
@@ -601,6 +629,194 @@ export class Roulette extends EventTarget {
     });
   }
 
+  /** 나보다 아래(앞)에 있는 가장 가까운 구슬 */
+  private _nearestAhead(marble: Marble, maxDistance: number): Marble | null {
+    let best: Marble | null = null;
+    let bestD = maxDistance;
+    for (const m of this._marbles) {
+      if (m === marble || m.y <= marble.y + 0.1) continue;
+      const d = Math.hypot(m.x - marble.x, m.y - marble.y);
+      if (d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  /** 분신술: 내 뒤(위)쪽 빈자리에 분신 둘을 2.5초 동안 세워 따라오는 구슬을 막는다 */
+  private _clone(marble: Marble) {
+    const p = marble.position;
+    const DURATION = 2500;
+    const spots = [
+      [-0.6, -0.75],
+      [0.6, -0.75],
+      [0, -1.2],
+      [-1.1, -0.3],
+      [1.1, -0.3],
+    ];
+    let made = 0;
+    for (const [dx, dy] of spots) {
+      if (made >= 2) break;
+      const x = p.x + dx;
+      const y = p.y + dy;
+      if (!this._isFreeSpot(x, y, marble, p)) continue;
+      const handle = this.physics.createTempObstacle(x, y, MARBLE_RADIUS);
+      this._effects.push(new DecoyEffect({ x, y }, marble.hue, MARBLE_RADIUS, DURATION));
+      this._schedule(DURATION, () => this.physics.removeTempObstacle(handle));
+      made++;
+    }
+  }
+
+  /** 고무 펀치: 앞 구슬에게 팔을 뻗어 붙잡고 서로 반대로 튕겨, 상대는 뒤로 나는 앞으로 */
+  private _rubberPunch(marble: Marble) {
+    const target = this._nearestAhead(marble, 8);
+    if (!target) return;
+    this._effects.push(
+      new TetherEffect(
+        () => (this._alive(marble) ? marble.position : null),
+        () => (this._alive(target) ? target.position : null),
+        getSkillView(Skills.RubberPunch).color,
+        350,
+        'arm'
+      )
+    );
+    this._schedule(150, () => {
+      if (!this._alive(marble) || !this._alive(target)) return;
+      const dx = target.x - marble.x;
+      const dy = target.y - marble.y;
+      const d = Math.hypot(dx, dy) || 1;
+      this.physics.applyImpulse(target.id, (-dx / d) * 9, (-dy / d) * 9 - 2);
+      this.physics.applyImpulse(marble.id, (dx / d) * 12, (dy / d) * 12);
+      this._effects.push(new SkillEffect(target.x, target.y, Skills.RubberPunch, false));
+    });
+  }
+
+  /** 리펄서: 바닥으로 빔을 쏴 떠오르고, 0.35초 뒤 아래쪽에서 가장 길게 뚫린 방향으로 날아간다 */
+  private _repulsor(marble: Marble) {
+    const from = marble.position;
+    const color = getSkillView(Skills.Repulsor).color;
+    const len = this.physics.rayFraction(from.x, from.y, from.x, from.y + 8) * 8;
+    this._effects.push(new BeamEffect(from, { x: from.x, y: from.y + len }, color, 300));
+    this.physics.setVelocity(marble.id, 0, -7);
+    this._schedule(350, () => {
+      if (!this._alive(marble)) return;
+      const p = marble.position;
+      let best = { dx: 0, dy: 1, dist: 0 };
+      for (let deg = -60; deg <= 60; deg += 15) {
+        const a = (deg * Math.PI) / 180;
+        const dx = Math.sin(a);
+        const dy = Math.cos(a);
+        const dist = this.physics.clearFraction(p.x, p.y, p.x + dx * 5, p.y + dy * 5, MARBLE_RADIUS) * 5;
+        if (dist > best.dist) best = { dx, dy, dist };
+      }
+      this.physics.setVelocity(marble.id, best.dx * 15, best.dy * 15);
+      this._effects.push(new BeamEffect(p, { x: p.x - best.dx * 1.5, y: p.y - best.dy * 1.5 }, color, 250));
+    });
+  }
+
+  /** 얼음 다리: 1.5초 동안 지나간 자리에 3초짜리 얼음길을 깐다. 다른 구슬이 밟으면 미끄러진다 */
+  private _iceBridge(marble: Marble) {
+    const points = [{ ...marble.position }];
+    const trail = { points, caster: marble, remaining: 3000 };
+    this._iceTrails.push(trail);
+    this._effects.push(new IceTrailEffect(points, 3000));
+    this.physics.scaleVelocity(marble.id, 1.4);
+    for (let i = 1; i <= 15; i++) {
+      this._schedule(i * 100, () => {
+        if (this._alive(marble)) points.push({ ...marble.position });
+      });
+    }
+  }
+
+  /** 얼음길 위에 있는 구슬은 옆으로 미끄러지며 속도를 잃는다. 한 번 미끄러지면 0.8초 동안은 다시 안 미끄러진다 */
+  private _updateIce(deltaTime: number) {
+    if (this._iceTrails.length === 0) return;
+    this._iceTrails.forEach((t) => {
+      t.remaining -= deltaTime;
+    });
+    this._iceTrails = this._iceTrails.filter((t) => t.remaining > 0);
+    this._slipCooldown.forEach((v, m) => {
+      if (v - deltaTime <= 0) this._slipCooldown.delete(m);
+      else this._slipCooldown.set(m, v - deltaTime);
+    });
+    for (const m of this._marbles) {
+      if (this._slipCooldown.has(m) || m.nearGoal) continue;
+      const onIce = this._iceTrails.some(
+        (t) => t.caster !== m && t.points.some((p) => Math.hypot(p.x - m.x, p.y - m.y) < 0.55)
+      );
+      if (!onIce) continue;
+      const v = this.physics.getVelocity(m.id);
+      this.physics.setVelocity(m.id, v.x * 0.3 + (Math.random() < 0.5 ? -5 : 5), v.y * 0.3 - 1);
+      this._slipCooldown.set(m, 800);
+      this._effects.push(new SkillEffect(m.x, m.y, Skills.IceBridge, false));
+    }
+  }
+
+  /** 방패 던지기: 가까운 구슬 셋을 차례로 맞히며 튕겨 다니는 원반 */
+  private _shieldThrow(marble: Marble) {
+    const color = getSkillView(Skills.ShieldThrow).color;
+    const targets: Marble[] = [];
+    let from = marble.position;
+    for (let i = 0; i < 3; i++) {
+      const next = this._marbles
+        .filter((m) => m !== marble && !targets.includes(m))
+        .map((m) => ({ m, d: Math.hypot(m.x - from.x, m.y - from.y) }))
+        .filter((c) => c.d < 8)
+        .sort((a, b) => a.d - b.d)[0];
+      if (!next) break;
+      targets.push(next.m);
+      from = next.m.position;
+    }
+    const throwAt = (i: number, origin: { x: number; y: number }) => {
+      const target = targets[i];
+      if (!target || !this._alive(target)) return;
+      this._effects.push(
+        new Projectile(
+          origin,
+          () => (this._alive(target) ? target.position : null),
+          140,
+          { color, size: 0.2 },
+          (at) => {
+            const dx = at.x - origin.x;
+            const dy = at.y - origin.y;
+            const d = Math.hypot(dx, dy) || 1;
+            this.physics.applyImpulse(target.id, (dx / d) * 10, (dy / d) * 10 - 2);
+            this._effects.push(new SkillEffect(at.x, at.y, Skills.ShieldThrow, false));
+            throwAt(i + 1, at);
+          }
+        )
+      );
+    };
+    throwAt(0, marble.position);
+  }
+
+  /** 그림자 이동: 앞 구슬의 그림자 속으로 사라졌다가 0.25초 뒤 그 구슬 바로 앞(아래)에 나타난다 */
+  private _shadowStep(marble: Marble) {
+    const target = this._nearestAhead(marble, 15);
+    if (!target) return;
+    this._schedule(250, () => {
+      if (!this._alive(marble) || !this._alive(target)) return;
+      const T = target.position;
+      for (const [dx, dy] of [
+        [0, 0.65],
+        [-0.55, 0.45],
+        [0.55, 0.45],
+        [-0.65, 0],
+        [0.65, 0],
+      ]) {
+        const x = T.x + dx;
+        const y = T.y + dy;
+        if (!this._isFreeSpot(x, y, marble, T)) continue;
+        this.physics.teleport(marble.id, x, y);
+        const v = this.physics.getVelocity(target.id);
+        this.physics.setVelocity(marble.id, v.x, Math.max(v.y, 2));
+        this._effects.push(new SkillEffect(x, y, Skills.ShadowStep, false));
+        return;
+      }
+    });
+  }
+
   /** 반지름 안에 있는 구슬들. except는 빼고 */
   private _marblesAround(center: { x: number; y: number }, radius: number, except?: Marble): Marble[] {
     return this._marbles.filter((m) => m !== except && Math.hypot(m.x - center.x, m.y - center.y) < radius);
@@ -707,6 +923,7 @@ export class Roulette extends EventTarget {
 
   private _updateEffects(deltaTime: number) {
     this._updateTasks(deltaTime);
+    this._updateIce(deltaTime);
     this._effects.forEach((effect) => effect.update(deltaTime));
     this._effects = this._effects.filter((effect) => !effect.isDestroy);
   }
@@ -824,6 +1041,8 @@ export class Roulette extends EventTarget {
     this._pendingRemovals.forEach((id) => window.clearTimeout(id));
     this._pendingRemovals = [];
     this._tasks = [];
+    this._iceTrails = [];
+    this._slipCooldown.clear();
     this.physics.clearMarbles();
     this._result = null;
     this._winners = [];

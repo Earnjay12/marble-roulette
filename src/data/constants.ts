@@ -34,6 +34,12 @@ export enum Skills {
   WebSwing = 26,
   Thunder = 27,
   Smash = 28,
+  Clone = 29,
+  RubberPunch = 30,
+  Repulsor = 31,
+  IceBridge = 32,
+  ShieldThrow = 33,
+  ShadowStep = 34,
 }
 
 /** 스킬 팩. general=일반 스킬, anime=오마주(작품 속 기술에서 영감을 받은 스킬) */
