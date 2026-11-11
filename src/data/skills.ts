@@ -176,7 +176,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     iconRule: 'evenodd',
   },
   [Skills.Beam]: {
-    name: '에네르기파',
+    name: '기공포',
     description: '기를 모아 광선을 쏴서 맞은 구슬들을 날려 버린다',
     color: '#4fc3f7',
     effectRadius: 2,
@@ -201,7 +201,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     icon: 'M8 22h7a4 4 0 004-4v-7a1.5 1.5 0 00-3 0v3h-1V6.5a1.5 1.5 0 00-3 0V14h-1V4.5a1.5 1.5 0 00-3 0V14H7V8a1.5 1.5 0 00-3 0v9l-1.5-1.5a1.5 1.5 0 00-2.1 2.1z',
   },
   [Skills.WebSwing]: {
-    name: '거미줄 스윙',
+    name: '웹스윙',
     description: '앞쪽 벽에 거미줄을 쏴서 끌려가듯 날아간다',
     color: '#ff3838',
     effectRadius: 2,
@@ -218,7 +218,7 @@ export const SkillDefs: Record<Skills, SkillDef> = {
     icon: 'M3 2h14v7H3zM8 9h4v13H8zM18 3l3 0-2 4h2l-4 6 1-4h-2z',
   },
   [Skills.Smash]: {
-    name: '헐크 스매시',
+    name: '스매시',
     description: '아래로 내리꽂혀서 착지 충격파로 주변을 날린다',
     color: '#2ecc71',
     effectRadius: 3.5,
@@ -262,9 +262,9 @@ export const ThemeSkillSets: Record<string, SkillOverride[]> = {
     { skill: Skills.Swap, name: '볼 체인지', description: '앞 구슬과 자리를 바꾼다' },
     { skill: Skills.Grow, name: '점보볼', description: '커져서 범퍼와 플리퍼를 무시하고 내려간다' },
   ],
-  // 애니 팩: 애니메이션·영화 캐릭터의 기술에서 따왔다. 테마와 상관없이 이 목록을 쓴다
+  // 오마주 팩: 여러 작품 속 기술에서 영감을 받았다. 테마와 상관없이 이 목록을 쓴다
   anime: [
-    { skill: Skills.Dash, name: '벽력일섬', description: '번개처럼 다섯 번 꺾어 베듯 장애물 사이를 내달린다' },
+    { skill: Skills.Dash, name: '뇌광 질주', description: '번개처럼 다섯 번 꺾어 장애물 사이를 내달린다' },
     { skill: Skills.Teleport },
     { skill: Skills.Beam },
     { skill: Skills.TimeStop },
@@ -279,7 +279,7 @@ export interface SkillView extends SkillDef {
   skill: Skills;
 }
 
-/** 애니 팩이면 테마와 상관없이 애니 목록, 아니면 테마의 목록 */
+/** 오마주 팩이면 테마와 상관없이 오마주 목록, 아니면 테마의 목록 */
 function themeSet(themeName: string): SkillOverride[] {
   if (options.skillPack === 'anime') return ThemeSkillSets.anime;
   return ThemeSkillSets[themeName] ?? ThemeSkillSets.dark;

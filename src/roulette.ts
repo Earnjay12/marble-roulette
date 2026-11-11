@@ -434,7 +434,7 @@ export class Roulette extends EventTarget {
       });
   }
 
-  /** 순간이동(드래곤볼): 1등 바로 옆이나 뒤 빈자리로 옮긴다. 내가 이미 1등이면 쓰지 않는다 */
+  /** 순간이동: 1등 바로 옆이나 뒤 빈자리로 옮긴다. 내가 이미 1등이면 쓰지 않는다 */
   private _teleportToLeader(marble: Marble) {
     const leader = this._leader(marble);
     if (!leader || leader.y <= marble.y) return;
@@ -459,7 +459,7 @@ export class Roulette extends EventTarget {
   }
 
   /**
-   * 에네르기파(드래곤볼): 0.4초 기를 모은 뒤, 아래쪽 반원에서 구슬을 가장 많이 맞히는 방향으로
+   * 기공포: 0.4초 기를 모은 뒤, 아래쪽 반원에서 구슬을 가장 많이 맞히는 방향으로
    * 광선을 쏜다. 광선은 벽에서 멈추고, 맞은 구슬은 광선 방향으로 날아간다
    */
   private _chargeBeam(marble: Marble) {
@@ -493,7 +493,7 @@ export class Roulette extends EventTarget {
     });
   }
 
-  /** 시간 정지(죠죠): 다른 모든 구슬을 1.5초 멈춘다. 방금 풀려나 면역인 구슬은 빼고 */
+  /** 시간 정지: 다른 모든 구슬을 1.5초 멈춘다. 방금 풀려나 면역인 구슬은 빼고 */
   private _timeStop(marble: Marble) {
     this._marbles.forEach((m) => {
       if (m !== marble) m.stun(1500);
@@ -501,7 +501,7 @@ export class Roulette extends EventTarget {
     this._effects.push(new TimeStopEffect(marble.position, 1500));
   }
 
-  /** 포스 그립(스타워즈): 앞서가는 가장 가까운 구슬을 위로 들어 올린 뒤 잠시 붙잡아 둔다 */
+  /** 포스 그립: 앞서가는 가장 가까운 구슬을 위로 들어 올린 뒤 잠시 붙잡아 둔다 */
   private _forceGrip(marble: Marble) {
     const candidates = this._marblesAround(marble.position, 10, marble).filter((m) => m.y > marble.y);
     if (candidates.length === 0) return;
@@ -532,7 +532,7 @@ export class Roulette extends EventTarget {
   }
 
   /**
-   * 거미줄 스윙(스파이더맨): 아래쪽 좌우 비스듬한 방향으로 거미줄을 쏴서 가장 아래쪽에 맞은 벽이나 장애물을 고르고,
+   * 웹스윙: 아래쪽 좌우 비스듬한 방향으로 거미줄을 쏴서 가장 아래쪽에 맞은 벽이나 장애물을 고르고,
    * 그 지점을 향해 0.4초 동안 끌려간다
    */
   private _webSwing(marble: Marble) {
@@ -575,7 +575,7 @@ export class Roulette extends EventTarget {
     }
   }
 
-  /** 천둥 망치(토르): 0.25초 뒤 1등에게 하늘에서 벼락이 떨어져 1초 멈추고 주변 구슬이 날아간다 */
+  /** 천둥 망치: 0.25초 뒤 1등에게 하늘에서 벼락이 떨어져 1초 멈추고 주변 구슬이 날아간다 */
   private _thunderStrike(marble: Marble) {
     const leader = this._leader(marble);
     if (!leader) return;
@@ -590,7 +590,7 @@ export class Roulette extends EventTarget {
     });
   }
 
-  /** 헐크 스매시: 아래로 세게 내리꽂고, 0.35초 뒤 그 자리에서 충격파로 주변을 날린다 */
+  /** 스매시: 아래로 세게 내리꽂고, 0.35초 뒤 그 자리에서 충격파로 주변을 날린다 */
   private _smash(marble: Marble) {
     this.physics.applyImpulse(marble.id, 0, 18);
     this._schedule(350, () => {

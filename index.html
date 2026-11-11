@@ -213,7 +213,7 @@
       btn.addEventListener('click', () => applySkillMode(btn.dataset.skill));
     });
 
-    // 스킬 팩: 일반 / 애니(캐릭터 기술). 능력·모노전투에서만 보인다
+    // 스킬 팩: 일반 / 오마주(작품 속 기술에서 영감). 능력·모노전투에서만 보인다
     const applyPack = (pack) => {
       window.options.skillPack = pack;
       localStorage.setItem('mbr_pack', pack);

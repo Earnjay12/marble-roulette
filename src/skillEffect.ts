@@ -453,7 +453,7 @@ export class Projectile implements GameObject {
   }
 }
 
-/** 에네르기파 광선. 굵은 빛줄기와 흰 심이 가늘어지며 사라진다 */
+/** 기공포 광선. 굵은 빛줄기와 흰 심이 가늘어지며 사라진다 */
 export class BeamEffect implements GameObject {
   isDestroy = false;
   private _elapsed = 0;
