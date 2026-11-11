@@ -178,8 +178,8 @@ export class Marble {
     let scale = 1;
     if (this._stunRemaining > 0) scale = 0;
     else if (this._slowRemaining > 0) scale = SLOW_GRAVITY;
-    else if (this._effectSkill === Skills.Feather) scale = 0.25;
-    else if (this._effectSkill === Skills.Anchor) scale = 5;
+    else if (this._effectSkill === Skills.Feather) scale = 1;
+    else if (this._effectSkill === Skills.Anchor) scale = 2.2;
     this.physics.setGravityScale(this.id, scale);
   }
 
@@ -210,7 +210,6 @@ export class Marble {
     if (this._effectSkill === Skills.None) return;
 
     if (this._effectSkill === Skills.Feather) {
-      this.physics.avoidMarbles(this.id, 1.8, deltaTime / 1000);
     }
     if (this._effectSkill === Skills.Ghost) {
       const { x, y } = this.position;
@@ -228,6 +227,9 @@ export class Marble {
     this._effectSkill = Skills.None;
     switch (skill) {
       case Skills.Feather:
+        this.physics.setPassMarbles(this.id, false);
+        this._applyGravity();
+        break;
       case Skills.Anchor:
         this._applyGravity();
         break;

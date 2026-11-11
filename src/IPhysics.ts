@@ -51,6 +51,9 @@ export interface IPhysics {
   /** 벽·장애물·구슬을 전부 통과한다 (유령) */
   setGhost(id: number, ghost: boolean): void;
 
+  /** 다른 구슬만 통과한다 (깃털) */
+  setPassMarbles(id: number, pass: boolean): void;
+
   /** 장애물(못·범퍼·풍차)만 통과한다. 벽과 구슬에는 부딪힌다 (거대화) */
   setPassObstacles(id: number, pass: boolean): void;
 

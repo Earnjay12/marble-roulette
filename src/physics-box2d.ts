@@ -26,6 +26,8 @@ export class Box2dPhysics implements IPhysics {
   /** 유령(전부 통과)·거대화(장애물 통과) 상태인 구슬 */
   private ghostIds = new Set<number>();
   private passObstacleIds = new Set<number>();
+  /** 깃털: 다른 구슬만 통과 */
+  private passMarbleIds = new Set<number>();
 
   /** 레이캐스트용으로 한 번만 만들어 재사용한다. wasm 객체를 매번 만들면 메모리가 샌다 */
   private rayInput!: Box2D.b2RayCastInput;
@@ -75,6 +77,7 @@ export class Box2dPhysics implements IPhysics {
     this.tempBodies.clear();
     this.ghostIds.clear();
     this.passObstacleIds.clear();
+    this.passMarbleIds.clear();
   }
 
   createStage(stage: StageDef): void {
@@ -195,6 +198,7 @@ export class Box2dPhysics implements IPhysics {
       delete this.marbleMap[id];
       this.ghostIds.delete(id);
       this.passObstacleIds.delete(id);
+      this.passMarbleIds.delete(id);
     }
   }
 
@@ -277,7 +281,7 @@ export class Box2dPhysics implements IPhysics {
     let vx = v.x + ax * 60 * deltaSeconds;
     let vy = v.y + ay * 30 * deltaSeconds;
     vx *= 0.97;
-    vy = Math.min(vy, 2.5);
+    vy = Math.min(vy, 9);
     src.SetLinearVelocity(this.vec(vx, vy));
     src.SetAwake(true);
   }
@@ -408,10 +412,19 @@ export class Box2dPhysics implements IPhysics {
     this.applyMask(id);
   }
 
+  /** 깃털: 벽·장애물에는 부딪히고 다른 구슬은 통과 */
+  setPassMarbles(id: number, pass: boolean): void {
+    if (pass) this.passMarbleIds.add(id);
+    else this.passMarbleIds.delete(id);
+    this.applyMask(id);
+  }
+
   private maskFor(id: number): number {
     if (this.ghostIds.has(id)) return 0;
-    if (this.passObstacleIds.has(id)) return COLLIDE_ALL & ~OBSTACLE_CATEGORY;
-    return COLLIDE_ALL;
+    let mask = COLLIDE_ALL;
+    if (this.passObstacleIds.has(id)) mask &= ~OBSTACLE_CATEGORY;
+    if (this.passMarbleIds.has(id)) mask &= ~MARBLE_CATEGORY;
+    return mask;
   }
 
   private applyMask(id: number) {
