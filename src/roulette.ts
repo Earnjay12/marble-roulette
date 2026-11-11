@@ -133,13 +133,13 @@ export class Roulette extends EventTarget {
     }
     this._lastTime = currentTime;
 
-    const interval = (this._updateInterval / 1000) * this._timeScale;
-
     while (this._elapsed >= this._updateInterval) {
-      this.physics.step(interval);
-      this._updateMarbles(this._updateInterval);
+      // 결승 직전 슬로모션에서는 물리와 함께 스킬 시간(멈춤·지속·쿨타임·연출)도 느리게 흐른다
+      const gameDelta = this._updateInterval * this._timeScale;
+      this.physics.step(gameDelta / 1000);
+      this._updateMarbles(gameDelta);
       this._particleManager.update(this._updateInterval);
-      this._updateEffects(this._updateInterval);
+      this._updateEffects(gameDelta);
       this._elapsed -= this._updateInterval;
       this._uiObjects.forEach((obj) => obj.update(this._updateInterval));
     }
@@ -539,12 +539,12 @@ export class Roulette extends EventTarget {
     });
   }
 
-  /** 시간 정지: 다른 모든 구슬을 1.5초 멈춘다. 방금 풀려나 면역인 구슬은 빼고 */
+  /** 시간 정지: 다른 모든 구슬을 0.8초 멈춘다. 결승 직전에도 통한다. 방금 풀려나 면역인 구슬은 빼고 */
   private _timeStop(marble: Marble) {
     this._marbles.forEach((m) => {
-      if (m !== marble) m.stun(800);
+      if (m !== marble) m.stun(800, true);
     });
-    this._effects.push(new TimeStopEffect(marble.position, 1500));
+    this._effects.push(new TimeStopEffect(marble.position, 1100));
   }
 
   /** 포스 그립: 앞서가는 가장 가까운 구슬을 위로 들어 올린 뒤 잠시 붙잡아 둔다 */

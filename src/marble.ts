@@ -157,9 +157,10 @@ export class Marble {
     this._applyGravity();
   }
 
-  /** 얼음·저주: 일정 시간 그 자리에 멈춘다. 중력도 끈다 */
-  stun(duration: number) {
-    if (!this.canBeStunned) return;
+  /** 얼음·저주: 일정 시간 그 자리에 멈춘다. 중력도 끈다. ignoreGoal이면 결승 직전에도 건다(시간 정지) */
+  stun(duration: number, ignoreGoal = false) {
+    if (this._stunRemaining > 0 || this._stunImmune > 0) return;
+    if (this.nearGoal && !ignoreGoal) return;
     this._stunRemaining = duration;
     this.physics.freezeMarble(this.id);
     this._applyGravity();
